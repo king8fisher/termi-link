@@ -17,7 +17,7 @@ describe('terminalLink with hyperlinks enabled', () => {
   beforeEach(() => {
     // Reset environment before each test
     process.env = { ...originalEnv };
-    process.env.FORCE_HYPERLINK = 'true';
+    process.env.TERMI_LINK_HYPERLINK = 'true';
   });
 
   afterEach(() => {
@@ -35,7 +35,7 @@ describe('terminalLink with hyperlinks disabled', () => {
   beforeEach(() => {
     // Reset environment before each test
     process.env = { ...originalEnv };
-    process.env.FORCE_NO_HYPERLINK = 'true';
+    process.env.TERMI_LINK_HYPERLINK = 'false';
   });
 
   afterEach(() => {
@@ -62,21 +62,21 @@ function tests(setAsSupported: boolean) {
 
   test('empty text', () => {
     const input = terminalLink('', 'https://example.com');
-    const expectedHyperlink = '\x1b]8;;https://example.com\x07https://example.com\x1b]8;;\x07\x1b[0m';
-    const expectedNoHyperlink = 'https://example.com\u001b[0m';
+    const expectedHyperlink = '\x1b]8;;https://example.com\x07https://example.com\x1b]8;;\x07';
+    const expectedNoHyperlink = 'https://example.com';
     testAll(input, expectedHyperlink, expectedNoHyperlink);
   });
 
   test('basic link', () => {
     const input = terminalLink('Hello', 'https://example.com');
-    const expectedHyperlink = '\x1b]8;;https://example.com\x07Hello\x1b]8;;\x07\x1b[0m';
-    const expectedNoHyperlink = 'Hello (https://example.com)\u001b[0m';
+    const expectedHyperlink = '\x1b]8;;https://example.com\x07Hello\x1b]8;;\x07';
+    const expectedNoHyperlink = 'Hello (https://example.com)';
     testAll(input, expectedHyperlink, expectedNoHyperlink);
   });
 
   test('fallback set to false', () => {
     const input = terminalLink('Hello', 'https://example.com', { fallback: false });
-    const expectedHyperlink = '\x1b]8;;https://example.com\x07Hello\x1b]8;;\x07\x1b[0m';
+    const expectedHyperlink = '\x1b]8;;https://example.com\x07Hello\x1b]8;;\x07';
     const expectedNoHyperlink = '';
     testAll(input, expectedHyperlink, expectedNoHyperlink);
   });

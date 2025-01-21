@@ -42,10 +42,10 @@ function checkAllEnvs(vars: string[]): boolean {
 // Check if terminal supports hyperlinks
 function supportsHyperlinks(): boolean {
   // Force hyperlinks if environment variable is set
-  if (matchesEnv('FORCE_HYPERLINK', ['1', 'true', 'always', 'enabled'])) {
+  if (matchesEnv('TERMI_LINK_HYPERLINK', ['1', 'true', 'always', 'enabled'])) {
     return true;
   }
-  if (matchesEnv('FORCE_NO_HYPERLINK', ['1', 'true', 'always', 'enabled'])) {
+  if (matchesEnv('TERMI_LINK_HYPERLINK', ['0', 'false', 'never', 'disabled'])) {
     return false;
   }
 
@@ -105,8 +105,16 @@ function supportsHyperlinks(): boolean {
   return false;
 }
 
+export const ANSI_RESET = "\u001b[0m";
+
+function sanitizeUrl(url: string): string {
+  // Remove control characters
+  return url.replace(/[\x00-\x1F\x7F]/g, '');
+}
+
 /**
- * Creates a clickable terminal link, optionally color-colored
+ * Creates a clickable terminal link sequence of characters. The url provided will be sanitized to remove control characters.
+ * 
  * @param text The text to display, if an empty string `""` is passed, the text will be the same as the url, and in the fallback case, the link will be the only thing displayed.
  * @param url The URL to link to
  * @param options Optional parameters
@@ -115,20 +123,21 @@ If set to `false`, there will be an empty string returned when a terminal is uns
  * @returns Formatted terminal link string
  */
 export function terminalLink(text: string, url: string, options?: {
-  fallback?: false | ((text: string, url: string) => string)
+  fallback?: false | ((text: string, url: string) => string),
 } | undefined): string {
   const { fallback = null } = options || {};
   //const textColor = parseColor(color);
   if (supportsHyperlinks()) {
-    //return `\x1b]8;;${url}\x07${textColor}${text || url}\x1b]8;;\x07\u001b[0m`;
-    return `\x1b]8;;${url}\x07${text || url}\x1b]8;;\x07\u001b[0m`;
+    //return `\x1b]8;;${url}\x07${textColor}${text || url}\x1b]8;;\x07`;
+    const sanitized = sanitizeUrl(url)
+    return `\x1b]8;;${sanitized}\x07${text || sanitized}\x1b]8;;\x07`;
   }
   if (fallback == null) {
     if (!text) {
-      return `${url}\u001b[0m`;
+      return `${sanitizeUrl(url)}`;
     }
-    //return `${textColor}${text} (${url})\u001b[0m`;
-    return `${text} (${url})\u001b[0m`;
+    //return `${textColor}${text} (${url})`;
+    return `${text} (${sanitizeUrl(url)})`;
   } else if (fallback === false) {
     return ``;
   } else {
