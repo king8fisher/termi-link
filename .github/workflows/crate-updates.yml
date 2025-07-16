@@ -22,14 +22,20 @@ jobs:
           CURRENT_VERSION=$(cat .github/workflows/supports-hyperlinks-version.txt)
           
           # Get latest version from crates.io with error handling
-          RESPONSE=$(curl -s "https://crates.io/api/v1/crates/$CRATE_NAME")
-          LATEST_VERSION=$(echo "$RESPONSE" | jq -r '.crate.newest_version')
+          # Rate limit: crates.io requires max 1 request per second
+          RESPONSE=$(curl -s -H "User-Agent: termi-link-updater (https://github.com/king8fisher/termi-link; contact: king8fisher@users.noreply.github.com)" "https://crates.io/api/v1/crates/$CRATE_NAME")
+          LATEST_VERSION=$(echo "$RESPONSE" | jq -r '.crate.newest_version // empty')
           
           echo "API Response: $RESPONSE"
           echo "Current version: $CURRENT_VERSION"
           echo "Latest version: $LATEST_VERSION"
           
           # Validate API response
+          if echo "$RESPONSE" | jq -e '.errors' > /dev/null 2>&1; then
+            echo "::error::crates.io API returned errors: $RESPONSE"
+            exit 1
+          fi
+          
           if [ "$LATEST_VERSION" = "null" ] || [ -z "$LATEST_VERSION" ]; then
             echo "::error::Failed to fetch latest version from crates.io API"
             echo "::error::API Response: $RESPONSE"
