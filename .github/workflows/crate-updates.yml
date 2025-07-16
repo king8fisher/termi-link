@@ -21,8 +21,20 @@ jobs:
           CRATE_NAME="supports-hyperlinks"
           CURRENT_VERSION=$(cat .github/workflows/supports-hyperlinks-version.txt)
           
-          # Get latest version from crates.io
-          LATEST_VERSION=$(curl -s "https://crates.io/api/v1/crates/$CRATE_NAME" | jq -r '.crate.newest_version')
+          # Get latest version from crates.io with error handling
+          RESPONSE=$(curl -s "https://crates.io/api/v1/crates/$CRATE_NAME")
+          LATEST_VERSION=$(echo "$RESPONSE" | jq -r '.crate.newest_version')
+          
+          echo "API Response: $RESPONSE"
+          echo "Current version: $CURRENT_VERSION"
+          echo "Latest version: $LATEST_VERSION"
+          
+          # Validate API response
+          if [ "$LATEST_VERSION" = "null" ] || [ -z "$LATEST_VERSION" ]; then
+            echo "::error::Failed to fetch latest version from crates.io API"
+            echo "::error::API Response: $RESPONSE"
+            exit 1
+          fi
           
           echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
           echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
