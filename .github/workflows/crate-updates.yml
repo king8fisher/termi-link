@@ -1,0 +1,78 @@
+name: Check supports-hyperlinks Crate Updates
+
+on:
+  schedule:
+    # Run every Monday at 9 AM UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  check-crate-updates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check crate version
+        id: crate-check
+        run: |
+          CRATE_NAME="supports-hyperlinks"
+          CURRENT_VERSION=$(cat .github/workflows/supports-hyperlinks-version.txt)
+          
+          # Get latest version from crates.io
+          LATEST_VERSION=$(curl -s "https://crates.io/api/v1/crates/$CRATE_NAME" | jq -r '.crate.newest_version')
+          
+          echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "crate_name=$CRATE_NAME" >> $GITHUB_OUTPUT
+          
+          # Check if there's a new version
+          if [ "$LATEST_VERSION" != "$CURRENT_VERSION" ]; then
+            echo "has_update=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_update=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create notification issue
+        if: steps.crate-check.outputs.has_update == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const crateName = '${{ steps.crate-check.outputs.crate_name }}';
+            const currentVersion = '${{ steps.crate-check.outputs.current_version }}';
+            const latestVersion = '${{ steps.crate-check.outputs.latest_version }}';
+            
+            const title = `Update ${crateName} from ${currentVersion} to ${latestVersion}`;
+            const body = `## Crate Update Available
+            
+            **${crateName}** has a new version available:
+            - Current: \`${currentVersion}\`
+            - Latest: \`${latestVersion}\`
+            
+            Check the [changelog](https://crates.io/crates/${crateName}) for breaking changes.
+            
+            ---
+            Generated automatically by GitHub Actions`;
+            
+            // Check if issue already exists for this version
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'crate-update'
+            });
+            
+            const existingIssue = issues.data.find(issue => 
+              issue.title.includes(`Update ${crateName}`) && 
+              issue.title.includes(latestVersion)
+            );
+            
+            if (!existingIssue) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['crate-update', 'supports-hyperlinks']
+              });
+            }
