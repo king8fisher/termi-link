@@ -87,6 +87,9 @@ terminalLink('example.com', 'https://example.com', { fallback: (_text, url) => `
 
 ## Changelog
 
+- 2.1.0
+  - add detection of Foot, mintty, Tabby, Rio and Contour
+
 - 2.0.0
   - **Breaking:** `fallback: false` now returns `text` unchanged instead of an empty string, matching `terminal-link`. Pass `fallback: () => ''` to keep the old behavior.
   - **Breaking:** the default fallback is now `text url` instead of `text (url)`, matching `terminal-link` v5. The parens broke URL detection in terminals that scan for a run of non-whitespace. Pass

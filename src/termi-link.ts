@@ -34,6 +34,23 @@ function matchesEnv(name: string, values: string[]): boolean {
   return hasEnv(name) && values.includes(getEnv(name));
 }
 
+// Check if an environment variable contains the given needle, ignoring case.
+// Wider than matchesEnv, which compares by exact equality: the terminals below
+// that use it are documented by substring, not by an exact value.
+function envIncludes(name: string, needle: string): boolean {
+  return hasEnv(name) && getEnv(name).toLowerCase().includes(needle.toLowerCase());
+}
+
+// Compare a parsed version against a floor, major then minor then patch. A
+// non-numeric component parses to NaN and every NaN comparison is false, so an
+// unparseable version fails its gate rather than passing it.
+function atLeast(v: Version, floor: string): boolean {
+  const f = parseVersion(floor);
+  if (v.major !== f.major) return v.major > f.major;
+  if (v.minor !== f.minor) return v.minor > f.minor;
+  return v.patch >= f.patch;
+}
+
 // Check if any of the environment variables exist
 function checkAllEnvs(vars: string[]): boolean {
   return vars.some(v => hasEnv(v));
@@ -84,6 +101,13 @@ function supportsHyperlinks(): boolean {
         if (v.major >= 3) return true;
         break;
     }
+
+    // Matched by substring rather than by an exact value, so they cannot join
+    // the switch above.
+    if (envIncludes('TERM_PROGRAM', 'mintty') && atLeast(v, '2.9.7')) return true;
+    if (envIncludes('TERM_PROGRAM', 'tabby')) return true;
+    if (envIncludes('TERM_PROGRAM', 'rio') && atLeast(v, '0.0.28')) return true;
+
     // positive-only: an unknown program, or a known one that failed its version
     // gate, falls through to the TERM / COLORTERM / TERMINAL_EMULATOR /
     // standalone-variable checks below instead of answering for them.
@@ -94,6 +118,12 @@ function supportsHyperlinks(): boolean {
     return true;
   }
 
+  // Kept out of the list above, which is exact-match: Foot sets either `foot`
+  // or a value carrying it as a substring.
+  if (envIncludes('TERM', 'foot')) {
+    return true;
+  }
+
   // Check COLORTERM variable
   if (matchesEnv('COLORTERM', ['xfce4-terminal'])) {
     return true;
@@ -101,6 +131,14 @@ function supportsHyperlinks(): boolean {
 
   // Check JetBrains terminals
   if (matchesEnv('TERMINAL_EMULATOR', ['JetBrains-JediTerm'])) {
+    return true;
+  }
+
+  // Contour is the only terminal keyed off neither TERM_PROGRAM, TERM,
+  // COLORTERM nor TERMINAL_EMULATOR, so TERMINAL_VERSION_TRIPLE is read here
+  // and nowhere else.
+  if (envIncludes('TERMINAL_NAME', 'contour')
+      && atLeast(parseVersion(getEnv('TERMINAL_VERSION_TRIPLE')), '0.1.0')) {
     return true;
   }
 

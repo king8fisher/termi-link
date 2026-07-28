@@ -123,6 +123,8 @@ const DETECTION_ENV_VARS = [
   'WT_SESSION',
   'KONSOLE_VERSION',
   'TERMINAL_EMULATOR',
+  'TERMINAL_NAME',
+  'TERMINAL_VERSION_TRIPLE',
 ];
 
 describe('terminal detection by environment', () => {
@@ -160,6 +162,102 @@ describe('terminal detection by environment', () => {
   test('an unrecognized TERM_PROGRAM alone is unsupported', () => {
     process.env.TERM_PROGRAM = 'Apple_Terminal';
     expect(isSupported()).toBe(false);
+  });
+
+  test('mintty 2.9.7 is supported — the floor itself passes', () => {
+    process.env.TERM_PROGRAM = 'mintty';
+    process.env.TERM_PROGRAM_VERSION = '2.9.7';
+    expect(isSupported()).toBe(true);
+  });
+
+  // The floor is patch-level, so a two-component comparison would wrongly pass.
+  test('mintty 2.9.6 is unsupported — the floor is patch-level', () => {
+    process.env.TERM_PROGRAM = 'mintty';
+    process.env.TERM_PROGRAM_VERSION = '2.9.6';
+    expect(isSupported()).toBe(false);
+  });
+
+  test('mintty 3.0.0 is supported — a higher major implies support', () => {
+    process.env.TERM_PROGRAM = 'mintty';
+    process.env.TERM_PROGRAM_VERSION = '3.0.0';
+    expect(isSupported()).toBe(true);
+  });
+
+  // An absent version parses to 0.0.0, which must not read as satisfying a gate.
+  test('mintty without a version is unsupported', () => {
+    process.env.TERM_PROGRAM = 'mintty';
+    expect(isSupported()).toBe(false);
+  });
+
+  test('Tabby is supported — ungated', () => {
+    process.env.TERM_PROGRAM = 'Tabby';
+    expect(isSupported()).toBe(true);
+  });
+
+  // Case-insensitivity is why `switch (term)` cannot express these cases.
+  test('tabby is supported regardless of case', () => {
+    process.env.TERM_PROGRAM = 'tabby';
+    expect(isSupported()).toBe(true);
+  });
+
+  test('rio 0.0.28 is supported — the floor itself passes', () => {
+    process.env.TERM_PROGRAM = 'rio';
+    process.env.TERM_PROGRAM_VERSION = '0.0.28';
+    expect(isSupported()).toBe(true);
+  });
+
+  test('rio 0.0.27 is unsupported', () => {
+    process.env.TERM_PROGRAM = 'rio';
+    process.env.TERM_PROGRAM_VERSION = '0.0.27';
+    expect(isSupported()).toBe(false);
+  });
+
+  test('rio 0.1.0 is supported — a higher minor implies support', () => {
+    process.env.TERM_PROGRAM = 'rio';
+    process.env.TERM_PROGRAM_VERSION = '0.1.0';
+    expect(isSupported()).toBe(true);
+  });
+
+  test('foot is supported', () => {
+    process.env.TERM = 'foot';
+    expect(isSupported()).toBe(true);
+  });
+
+  // Foot sets either value, and the exact-match TERM list would miss this one.
+  test('foot-extra is supported', () => {
+    process.env.TERM = 'foot-extra';
+    expect(isSupported()).toBe(true);
+  });
+
+  test('FOOT is supported regardless of case', () => {
+    process.env.TERM = 'FOOT';
+    expect(isSupported()).toBe(true);
+  });
+
+  test('contour 0.1.0 is supported — the floor itself passes', () => {
+    process.env.TERMINAL_NAME = 'contour';
+    process.env.TERMINAL_VERSION_TRIPLE = '0.1.0';
+    expect(isSupported()).toBe(true);
+  });
+
+  test('contour 0.0.9 is unsupported', () => {
+    process.env.TERMINAL_NAME = 'contour';
+    process.env.TERMINAL_VERSION_TRIPLE = '0.0.9';
+    expect(isSupported()).toBe(false);
+  });
+
+  test('contour without a version triple is unsupported', () => {
+    process.env.TERMINAL_NAME = 'contour';
+    expect(isSupported()).toBe(false);
+  });
+
+  // A failed Contour gate must fall through to the standalone-variable check,
+  // not answer for it.
+  test('a failed contour gate still reaches the standalone-variable check', () => {
+    process.env.TERMINAL_NAME = 'contour';
+    process.env.TERMINAL_VERSION_TRIPLE = '0.0.9';
+    process.env.WT_SESSION = '1';
+    expect(isSupported()).toBe(true);
   });
 });
 
@@ -261,6 +359,19 @@ describe('TERM_PROGRAM fall-through', () => {
     process.env.TERM_PROGRAM_VERSION = '1.0.0';
     process.env.TERM = 'xterm-kitty';
     expect(isSupported()).toBe(true);
+  });
+
+  test('a substring-matched program whose gate fails still reaches the TERM check', () => {
+    process.env.TERM_PROGRAM = 'rio';
+    process.env.TERM_PROGRAM_VERSION = '0.0.1';
+    process.env.TERM = 'xterm-kitty';
+    expect(isSupported()).toBe(true);
+  });
+
+  test('falling through does not turn a failed mintty gate into a pass', () => {
+    process.env.TERM_PROGRAM = 'mintty';
+    process.env.TERM_PROGRAM_VERSION = '1.0.0';
+    expect(isSupported()).toBe(false);
   });
 });
 
