@@ -125,6 +125,7 @@ const DETECTION_ENV_VARS = [
   'TERMINAL_EMULATOR',
   'TERMINAL_NAME',
   'TERMINAL_VERSION_TRIPLE',
+  'TMUX',
 ];
 
 describe('terminal detection by environment', () => {
@@ -405,6 +406,94 @@ describe('TERM_PROGRAM fall-through', () => {
   test('a Hyper below the floor still reaches the TERM check', () => {
     process.env.TERM_PROGRAM = 'Hyper';
     process.env.TERM_PROGRAM_VERSION = '3.4.1';
+    process.env.TERM = 'xterm-kitty';
+    expect(isSupported()).toBe(true);
+  });
+});
+
+// A multiplexer is the program that actually receives the escape sequence, so
+// when one is present it answers for the session and the outer terminal's
+// inherited variables must not. That makes this branch terminal rather than
+// fall-through, which is a deliberate divergence from the contract above.
+describe('multiplexer pass-through', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    for (const name of DETECTION_ENV_VARS) {
+      delete process.env[name];
+    }
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  const SOCKET = '/tmp/tmux-501/default,1,0';
+
+  test('tmux 3.4 is supported — the floor itself passes', () => {
+    process.env.TMUX = SOCKET;
+    process.env.TERM_PROGRAM = 'tmux';
+    process.env.TERM_PROGRAM_VERSION = '3.4';
+    expect(isSupported()).toBe(true);
+  });
+
+  // The shipped release. Number('6b') is NaN, so this is the case that forces
+  // parseVersion onto parseInt.
+  test('tmux 3.6b is supported — a letter suffix still parses', () => {
+    process.env.TMUX = SOCKET;
+    process.env.TERM_PROGRAM = 'tmux';
+    process.env.TERM_PROGRAM_VERSION = '3.6b';
+    expect(isSupported()).toBe(true);
+  });
+
+  test('tmux 3.3a is unsupported — below the floor, letter suffix notwithstanding', () => {
+    process.env.TMUX = SOCKET;
+    process.env.TERM_PROGRAM = 'tmux';
+    process.env.TERM_PROGRAM_VERSION = '3.3a';
+    expect(isSupported()).toBe(false);
+  });
+
+  test('tmux without a version is unsupported', () => {
+    process.env.TMUX = SOCKET;
+    process.env.TERM_PROGRAM = 'tmux';
+    expect(isSupported()).toBe(false);
+  });
+
+  // A tmux old enough not to claim TERM_PROGRAM leaves the outer terminal's
+  // value in the pane, and that value must not answer for the multiplexer.
+  test('an outer terminal TERM_PROGRAM inside a pane is unsupported', () => {
+    process.env.TMUX = SOCKET;
+    process.env.TERM_PROGRAM = 'ghostty';
+    process.env.TERM_PROGRAM_VERSION = '1.3.2';
+    expect(isSupported()).toBe(false);
+  });
+
+  // The leak this step exists to close: VTE_VERSION is not in tmux's default
+  // update-environment, so it is inherited and goes stale on re-attach. This
+  // pins the branch as terminal — without it the negative result is
+  // indistinguishable from the old behavior.
+  test('an inherited VTE_VERSION does not answer for a tmux below the floor', () => {
+    process.env.TMUX = SOCKET;
+    process.env.TERM_PROGRAM = 'tmux';
+    process.env.TERM_PROGRAM_VERSION = '3.3a';
+    process.env.VTE_VERSION = '6800';
+    expect(isSupported()).toBe(false);
+  });
+
+  test('the force variable still wins over the multiplexer branch', () => {
+    process.env.TMUX = SOCKET;
+    process.env.TERM_PROGRAM = 'tmux';
+    process.env.TERM_PROGRAM_VERSION = '3.3a';
+    process.env.TERMI_LINK_HYPERLINK = 'true';
+    expect(isSupported()).toBe(true);
+  });
+
+  // No `case 'tmux'` was added to the switch, so outside a pane a stray
+  // TERM_PROGRAM=tmux still falls through per the fall-through contract.
+  test('TERM_PROGRAM=tmux without TMUX still falls through to the TERM check', () => {
+    process.env.TERM_PROGRAM = 'tmux';
+    process.env.TERM_PROGRAM_VERSION = '3.6b';
     process.env.TERM = 'xterm-kitty';
     expect(isSupported()).toBe(true);
   });

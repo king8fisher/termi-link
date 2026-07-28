@@ -100,6 +100,7 @@ terminalLink('example.com', 'https://example.com', { fallback: (_text, url) => `
   - add detection of Zed terminal
   - add detection of Foot, mintty, Tabby, Rio and Contour
   - **Breaking:** Hyper below 4 is no longer reported as supported. It ships xterm.js below 5, which has no OSC 8 support, so the link was emitted and swallowed — the url disappeared entirely. The plain-text fallback now preserves it.
+  - add detection of tmux pass-through. A session inside tmux 3.4 or later — the release where it began relaying OSC 8 — is now reported as supported. **Breaking:** a session inside an older tmux is now reported unsupported instead of inheriting the outer terminal's answer; those variables are stale the moment the session is re-attached elsewhere, and the multiplexer, not the terminal one hop out, is what receives the escape sequence.
   - a set but unrecognized `TERM_PROGRAM` no longer decides the answer on its own. Detection now falls through to the `TERM`, `COLORTERM`, `TERMINAL_EMULATOR` and standalone-variable checks, so a terminal that sets both is no longer reported unsupported. `terminology` 2.0 and later is also recognized now — its version gate rejected every release past 1.x.
 
 ## Credits  

@@ -15,7 +15,12 @@ const ENVIRONMENT_VARIABLES = [
 
 // Parse version string into Version object
 function parseVersion(version: string): Version {
-  const [major = 0, minor = 0, patch = 0] = version.split('.').map(Number);
+  // parseInt, not Number: a component may carry a letter suffix — tmux numbers
+  // its point releases `3.5a`, `3.6b` — and the leading digits are the version.
+  // A wholly non-numeric component still yields NaN and still fails its gate.
+  const [major = 0, minor = 0, patch = 0] = version
+    .split('.')
+    .map((component) => parseInt(component, 10));
   return { major, minor, patch };
 }
 
@@ -64,6 +69,21 @@ function supportsHyperlinks(): boolean {
   }
   if (matchesEnv('TERMI_LINK_HYPERLINK', ['0', 'false', 'never', 'disabled'])) {
     return false;
+  }
+
+  // A multiplexer is the program that actually receives our escape sequence,
+  // so when one is present it answers for the session — the outer terminal is
+  // one hop further out and its variables are inherited into the pane, where
+  // they go stale on re-attach. That makes this branch terminal rather than
+  // positive-only: falling through would let an inherited VTE_VERSION answer
+  // for a tmux that drops OSC 8.
+  if (hasEnv('TMUX')) {
+    // tmux relays OSC 8 from 3.4, and from 3.2 it reports itself as
+    // TERM_PROGRAM=tmux with its own version, so the gate is an ordinary one.
+    // Whether the *outer* terminal can render the link is tmux's question, not
+    // ours: it gates emission on the `hyperlinks` terminal feature (`Hls`).
+    return getEnv('TERM_PROGRAM') === 'tmux'
+      && atLeast(parseVersion(getEnv('TERM_PROGRAM_VERSION')), '3.4');
   }
 
   // VTE-based terminals
