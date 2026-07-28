@@ -77,6 +77,15 @@ function supportsHyperlinks(): boolean {
   // they go stale on re-attach. That makes this branch terminal rather than
   // positive-only: falling through would let an inherited VTE_VERSION answer
   // for a tmux that drops OSC 8.
+  //
+  // Zellij is deliberately not a second arm of this branch (goal G5b). A
+  // captured 0.44.3 pane environment shows it adds only
+  // ZELLIJ, ZELLIJ_PANE_ID and ZELLIJ_SESSION_NAME, and leaves the outer
+  // terminal's TERM_PROGRAM in place rather than claiming it the way tmux does.
+  // So the checks below already answer for the outer terminal, and no ZELLIJ
+  // variable carries a version to gate a pre-0.21.0 Zellij out with. A
+  // presence-only branch could only restate what inheritance says, or claim a
+  // terminal we cannot see is capable.
   if (hasEnv('TMUX')) {
     // tmux relays OSC 8 from 3.4, and from 3.2 it reports itself as
     // TERM_PROGRAM=tmux with its own version, so the gate is an ordinary one.
