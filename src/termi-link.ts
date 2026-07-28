@@ -69,6 +69,10 @@ function supportsHyperlinks(): boolean {
         return v.major > 1 || (v.major === 1 && v.minor >= 72);
       case 'ghostty':
         return v.major >= 1;
+      // Zed has only ever shipped 0.x, so any major-version gate would reject
+      // every real release; upstream supports-hyperlinks matches it ungated.
+      case 'zed':
+        return true;
       case 'terminology':
         return v.major >= 1 && v.minor >= 2;
       case 'Hyper':

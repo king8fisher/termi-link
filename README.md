@@ -29,7 +29,7 @@ terminalLink('example.com', 'https://example.com', { fallback: (_text, url) => `
 - [terminal-link](https://npmjs.com/package/terminal-link)
 - [termlink](https://github.com/savioxavier/termlink)
 - [supports-hyperlinks](https://github.com/zkat/supports-hyperlinks)
-  - 3.1.0
+  - 3.2.0
 - [tty-link](https://github.com/piotrmurach/tty-link)
 
 ## License
