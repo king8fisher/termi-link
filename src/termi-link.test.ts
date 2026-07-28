@@ -82,3 +82,57 @@ function tests(setAsSupported: boolean) {
   });
 }
 
+// Every variable supportsHyperlinks() inspects. Detection tests must clear all
+// of them, or they inherit the terminal the suite happens to be running in and
+// pass for the wrong reason.
+const DETECTION_ENV_VARS = [
+  'TERMI_LINK_HYPERLINK',
+  'TERM_PROGRAM',
+  'TERM_PROGRAM_VERSION',
+  'TERM',
+  'COLORTERM',
+  'VTE_VERSION',
+  'DOMTERM',
+  'WT_SESSION',
+  'KONSOLE_VERSION',
+  'TERMINAL_EMULATOR',
+];
+
+describe('terminal detection by environment', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    for (const name of DETECTION_ENV_VARS) {
+      delete process.env[name];
+    }
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test('zed is supported', () => {
+    process.env.TERM_PROGRAM = 'zed';
+    process.env.TERM_PROGRAM_VERSION = '0.198.5';
+    expect(isSupported()).toBe(true);
+  });
+
+  test('zed is supported when TERM_PROGRAM_VERSION is absent', () => {
+    process.env.TERM_PROGRAM = 'zed';
+    expect(isSupported()).toBe(true);
+  });
+
+  test('zed renders a hyperlink', () => {
+    process.env.TERM_PROGRAM = 'zed';
+    process.env.TERM_PROGRAM_VERSION = '0.198.5';
+    expect(terminalLink('Zed', 'https://zed.dev'))
+      .toBe('\x1b]8;;https://zed.dev\x07Zed\x1b]8;;\x07');
+  });
+
+  test('an unrecognized TERM_PROGRAM alone is unsupported', () => {
+    process.env.TERM_PROGRAM = 'Apple_Terminal';
+    expect(isSupported()).toBe(false);
+  });
+});
+
