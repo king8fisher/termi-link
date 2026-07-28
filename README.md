@@ -87,9 +87,6 @@ terminalLink('example.com', 'https://example.com', { fallback: (_text, url) => `
 
 ## Changelog
 
-- 2.1.0
-  - add detection of Foot, mintty, Tabby, Rio and Contour
-
 - 2.0.0
   - **Breaking:** `fallback: false` now returns `text` unchanged instead of an empty string, matching `terminal-link`. Pass `fallback: () => ''` to keep the old behavior.
   - **Breaking:** the default fallback is now `text url` instead of `text (url)`, matching `terminal-link` v5. The parens broke URL detection in terminals that scan for a run of non-whitespace. Pass
@@ -101,6 +98,8 @@ terminalLink('example.com', 'https://example.com', { fallback: (_text, url) => `
   - urls now percent-encode every byte above the 32–126 range that OSC 8 permits, instead of emitting raw non-ASCII. Astral characters encode correctly and a lone surrogate is dropped rather than throwing.
   - add `strictUrlEncoding`, an opt-in that also percent-encodes the printable ASCII characters RFC 3986 forbids in a URI. Defaults to `false`, so existing output is unchanged. Turn it on if your URLs can contain spaces — a raw space truncates the link in the plain-text fallback.
   - add detection of Zed terminal
+  - add detection of Foot, mintty, Tabby, Rio and Contour
+  - a set but unrecognized `TERM_PROGRAM` no longer decides the answer on its own. Detection now falls through to the `TERM`, `COLORTERM`, `TERMINAL_EMULATOR` and standalone-variable checks, so a terminal that sets both is no longer reported unsupported. `terminology` 2.0 and later is also recognized now — its version gate rejected every release past 1.x.
 
 ## Credits  
 
