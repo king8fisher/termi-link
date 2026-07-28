@@ -39,7 +39,7 @@ function checkAllEnvs(vars: string[]): boolean {
   return vars.some(v => hasEnv(v));
 }
 
-// Check if terminal supports hyperlinks
+// Check if current terminal supports hyperlinks
 function supportsHyperlinks(): boolean {
   // Force hyperlinks if environment variable is set
   if (matchesEnv('TERMI_LINK_HYPERLINK', ['1', 'true', 'always', 'enabled'])) {
@@ -111,41 +111,72 @@ function supportsHyperlinks(): boolean {
 
 export const ANSI_RESET = "\u001b[0m";
 
-function sanitizeUrl(url: string): string {
-  // Remove control characters
-  return url.replace(/[\x00-\x1F\x7F]/g, '');
+// Printable ASCII that RFC 3986 does not permit in a URI. These are never
+// delimiters and never meaningful raw, so encoding them is unambiguous — but a
+// raw space is still legal to OSC 8, which permits all of bytes 32-126, so the
+// encoding is opt-in rather than automatic.
+const INVALID_URI_CHARS = /[ "<>\\^`{|}]/g;
+
+function sanitizeUrl(url: string, strict = false): string {
+  // Remove control characters. In an OSC 8 sequence a BEL would end the URI
+  // early and an ESC could open a new sequence, so these are dropped rather
+  // than encoded.
+  const stripped = url.replace(/[\x00-\x1F\x7F]/g, '');
+  // OSC 8 requires the URI to stay inside bytes 32-126. Anything above that is
+  // unambiguously data rather than a delimiter, so percent-encoding it is
+  // lossless. Bytes 32-126 are left alone: only the caller knows whether an `&`
+  // separates parameters or is literal data. The `u` flag makes the class match
+  // whole code points, so astral characters survive as a surrogate pair; a lone
+  // surrogate cannot be encoded at all and is dropped like a control character.
+  const encoded = stripped.replace(/[^\x00-\x7F]/gu, (c) => {
+    try {
+      return encodeURIComponent(c);
+    } catch {
+      return '';
+    }
+  });
+  if (!strict) {
+    return encoded;
+  }
+  // `%` is deliberately not in the set, so an already-encoded url stays
+  // idempotent instead of double-encoding.
+  return encoded.replace(INVALID_URI_CHARS, (c) => encodeURIComponent(c));
 }
 
 /**
- * Creates a clickable terminal link sequence of characters. The url provided will be sanitized to remove control characters.
+ * Creates a clickable terminal link sequence of characters. The url provided will be sanitized: control characters are removed, and bytes above the 32-126 range OSC 8 permits are percent-encoded. Encoding within ASCII stays with the caller.
  * 
  * @param text The text to display, if an empty string `""` is passed, the text will be the same as the url, and in the fallback case, the link will be the only thing displayed.
  * @param url The URL to link to
  * @param options Optional parameters
- * @param options.fallback Override the default fallback or disable fallback. When function provided, it receives the `text` and `url` as parameters and is expected to return a string.
-If set to `false`, there will be an empty string returned when a terminal is unsupported.
+ * @param options.fallback Override the default fallback or disable it. When a function is provided, it receives the `text` and the sanitized `url` as parameters and is expected to return a string. The url is sanitized before it is passed, so a custom fallback cannot reintroduce control characters.
+ * If set to `false`, the `text` is returned unchanged on an unsupported terminal — the URL is simply not appended. This matches `terminal-link`.
+ * @param options.strictUrlEncoding Also percent-encode the printable ASCII characters RFC 3986 forbids in a URI: space, double quote, angle brackets, backslash, caret, backtick, braces and pipe. Defaults to `false`, which leaves them raw. A raw space is legal to OSC 8 but truncates the link in the plain-text fallback, because URL detectors stop at whitespace.
  * @returns Formatted terminal link string
  */
 export function terminalLink(text: string, url: string, options?: {
   fallback?: false | ((text: string, url: string) => string),
+  strictUrlEncoding?: boolean,
 } | undefined): string {
-  const { fallback = null } = options || {};
+  const { fallback = null, strictUrlEncoding = false } = options || {};
   //const textColor = parseColor(color);
   if (supportsHyperlinks()) {
     //return `\x1b]8;;${url}\x07${textColor}${text || url}\x1b]8;;\x07`;
-    const sanitized = sanitizeUrl(url)
+    const sanitized = sanitizeUrl(url, strictUrlEncoding);
     return `\x1b]8;;${sanitized}\x07${text || sanitized}\x1b]8;;\x07`;
   }
   if (fallback == null) {
     if (!text) {
-      return `${sanitizeUrl(url)}`;
+      return `${sanitizeUrl(url, strictUrlEncoding)}`;
     }
     //return `${textColor}${text} (${url})`;
-    return `${text} (${sanitizeUrl(url)})`;
+    // Space-delimited, not wrapped in parens: a linkifier that treats a URL as
+    // a run of non-whitespace would otherwise capture the closing paren.
+    return `${text} ${sanitizeUrl(url, strictUrlEncoding)}`;
   } else if (fallback === false) {
-    return ``;
+    return text;
   } else {
-    return fallback(text, url);
+    return fallback(text, sanitizeUrl(url, strictUrlEncoding));
   }
 }
 
