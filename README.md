@@ -99,6 +99,7 @@ terminalLink('example.com', 'https://example.com', { fallback: (_text, url) => `
   - add `strictUrlEncoding`, an opt-in that also percent-encodes the printable ASCII characters RFC 3986 forbids in a URI. Defaults to `false`, so existing output is unchanged. Turn it on if your URLs can contain spaces — a raw space truncates the link in the plain-text fallback.
   - add detection of Zed terminal
   - add detection of Foot, mintty, Tabby, Rio and Contour
+  - **Breaking:** Hyper below 4 is no longer reported as supported. It ships xterm.js below 5, which has no OSC 8 support, so the link was emitted and swallowed — the url disappeared entirely. The plain-text fallback now preserves it.
   - a set but unrecognized `TERM_PROGRAM` no longer decides the answer on its own. Detection now falls through to the `TERM`, `COLORTERM`, `TERMINAL_EMULATOR` and standalone-variable checks, so a terminal that sets both is no longer reported unsupported. `terminology` 2.0 and later is also recognized now — its version gate rejected every release past 1.x.
 
 ## Credits  

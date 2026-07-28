@@ -259,6 +259,34 @@ describe('terminal detection by environment', () => {
     process.env.WT_SESSION = '1';
     expect(isSupported()).toBe(true);
   });
+
+  // 3.4.1 is Hyper's newest stable release and it pins xterm.js 4.19.0, below
+  // the 5.0.0 floor where OSC 8 support begins.
+  test('Hyper 3.4.1 is unsupported — every stable Hyper is below the floor', () => {
+    process.env.TERM_PROGRAM = 'Hyper';
+    process.env.TERM_PROGRAM_VERSION = '3.4.1';
+    expect(isSupported()).toBe(false);
+  });
+
+  test('Hyper 4.0.0 is supported', () => {
+    process.env.TERM_PROGRAM = 'Hyper';
+    process.env.TERM_PROGRAM_VERSION = '4.0.0';
+    expect(isSupported()).toBe(true);
+  });
+
+  // The shipped 4.x builds are canaries, and parseVersion yields patch: NaN for
+  // them. A major-only comparison is unaffected; routing this gate through
+  // atLeast would compare NaN and wrongly reject.
+  test('Hyper 4.0.0-canary.5 is supported', () => {
+    process.env.TERM_PROGRAM = 'Hyper';
+    process.env.TERM_PROGRAM_VERSION = '4.0.0-canary.5';
+    expect(isSupported()).toBe(true);
+  });
+
+  test('Hyper without a version is unsupported', () => {
+    process.env.TERM_PROGRAM = 'Hyper';
+    expect(isSupported()).toBe(false);
+  });
 });
 
 // Setting TERM_PROGRAM must not decide the answer on its own. A program the
@@ -372,6 +400,13 @@ describe('TERM_PROGRAM fall-through', () => {
     process.env.TERM_PROGRAM = 'mintty';
     process.env.TERM_PROGRAM_VERSION = '1.0.0';
     expect(isSupported()).toBe(false);
+  });
+
+  test('a Hyper below the floor still reaches the TERM check', () => {
+    process.env.TERM_PROGRAM = 'Hyper';
+    process.env.TERM_PROGRAM_VERSION = '3.4.1';
+    process.env.TERM = 'xterm-kitty';
+    expect(isSupported()).toBe(true);
   });
 });
 

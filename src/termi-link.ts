@@ -97,8 +97,10 @@ function supportsHyperlinks(): boolean {
       case 'terminology':
         if (v.major > 1 || (v.major === 1 && v.minor >= 2)) return true;
         break;
+      // Hyper below 4 renders OSC 8 as non-clickable pseudo-links: it ships
+      // xterm.js < 5, which has no OSC 8 support at all.
       case 'Hyper':
-        if (v.major >= 3) return true;
+        if (v.major >= 4) return true;
         break;
     }
 
