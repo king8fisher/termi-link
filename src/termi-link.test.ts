@@ -163,6 +163,107 @@ describe('terminal detection by environment', () => {
   });
 });
 
+// Setting TERM_PROGRAM must not decide the answer on its own. A program the
+// switch does not know, or a known one whose version gate fails, still has to
+// reach the TERM / COLORTERM / TERMINAL_EMULATOR / standalone-variable checks
+// below it — a terminal that sets both TERM_PROGRAM and TERM is otherwise
+// reported unsupported for the wrong reason.
+describe('TERM_PROGRAM fall-through', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    for (const name of DETECTION_ENV_VARS) {
+      delete process.env[name];
+    }
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test('an unknown program still reaches the TERM check', () => {
+    process.env.TERM_PROGRAM = 'Apple_Terminal';
+    process.env.TERM = 'xterm-kitty';
+    expect(isSupported()).toBe(true);
+  });
+
+  test('an unknown program still reaches the COLORTERM check', () => {
+    process.env.TERM_PROGRAM = 'Apple_Terminal';
+    process.env.COLORTERM = 'xfce4-terminal';
+    expect(isSupported()).toBe(true);
+  });
+
+  test('an unknown program still reaches the TERMINAL_EMULATOR check', () => {
+    process.env.TERM_PROGRAM = 'Apple_Terminal';
+    process.env.TERMINAL_EMULATOR = 'JetBrains-JediTerm';
+    expect(isSupported()).toBe(true);
+  });
+
+  test('an unknown program still reaches the standalone-variable check', () => {
+    process.env.TERM_PROGRAM = 'Apple_Terminal';
+    process.env.WT_SESSION = '1';
+    expect(isSupported()).toBe(true);
+  });
+
+  test('a known program whose gate fails still reaches the TERM check', () => {
+    process.env.TERM_PROGRAM = 'ghostty';
+    process.env.TERM_PROGRAM_VERSION = '0.9.0';
+    process.env.TERM = 'xterm-ghostty';
+    expect(isSupported()).toBe(true);
+  });
+
+  test('falling through does not turn a failed gate into a pass', () => {
+    process.env.TERM_PROGRAM = 'ghostty';
+    process.env.TERM_PROGRAM_VERSION = '0.9.0';
+    expect(isSupported()).toBe(false);
+  });
+
+  test('iTerm.app above its floor still returns early', () => {
+    process.env.TERM_PROGRAM = 'iTerm.app';
+    process.env.TERM_PROGRAM_VERSION = '3.1.0';
+    expect(isSupported()).toBe(true);
+  });
+
+  test('ghostty above its floor still returns early', () => {
+    process.env.TERM_PROGRAM = 'ghostty';
+    process.env.TERM_PROGRAM_VERSION = '1.0.0';
+    expect(isSupported()).toBe(true);
+  });
+
+  test('terminology 2.0 is supported — a higher major implies support', () => {
+    process.env.TERM_PROGRAM = 'terminology';
+    process.env.TERM_PROGRAM_VERSION = '2.0.0';
+    expect(isSupported()).toBe(true);
+  });
+
+  test('terminology 1.1 is unsupported — the 1.2 floor still holds', () => {
+    process.env.TERM_PROGRAM = 'terminology';
+    process.env.TERM_PROGRAM_VERSION = '1.1.0';
+    expect(isSupported()).toBe(false);
+  });
+
+  test('terminology 1.2 is supported', () => {
+    process.env.TERM_PROGRAM = 'terminology';
+    process.env.TERM_PROGRAM_VERSION = '1.2.0';
+    expect(isSupported()).toBe(true);
+  });
+
+  test('alacritty is matched by TERM, not by a version-gated program case', () => {
+    process.env.TERM_PROGRAM = 'alacritty';
+    process.env.TERM_PROGRAM_VERSION = '0.10.0';
+    process.env.TERM = 'alacritty';
+    expect(isSupported()).toBe(true);
+  });
+
+  test('kitty is matched by TERM, not by a version-gated program case', () => {
+    process.env.TERM_PROGRAM = 'kitty';
+    process.env.TERM_PROGRAM_VERSION = '1.0.0';
+    process.env.TERM = 'xterm-kitty';
+    expect(isSupported()).toBe(true);
+  });
+});
+
 // On an unsupported terminal the output is plain text, so the terminal's own
 // URL detector has to find the link. Many detectors take a run of
 // non-whitespace after the scheme, which swallows a trailing `)`. U+200B is a

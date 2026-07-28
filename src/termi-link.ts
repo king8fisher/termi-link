@@ -62,28 +62,31 @@ function supportsHyperlinks(): boolean {
 
     switch (term) {
       case 'iTerm.app':
-        return v.major > 3 || (v.major === 3 && v.minor >= 1);
+        if (v.major > 3 || (v.major === 3 && v.minor >= 1)) return true;
+        break;
       case 'WezTerm':
-        return v.major >= 20200620;
+        if (v.major >= 20200620) return true;
+        break;
       case 'vscode':
-        return v.major > 1 || (v.major === 1 && v.minor >= 72);
+        if (v.major > 1 || (v.major === 1 && v.minor >= 72)) return true;
+        break;
       case 'ghostty':
-        return v.major >= 1;
+        if (v.major >= 1) return true;
+        break;
       // Zed has only ever shipped 0.x, so any major-version gate would reject
       // every real release; upstream supports-hyperlinks matches it ungated.
       case 'zed':
         return true;
       case 'terminology':
-        return v.major >= 1 && v.minor >= 2;
+        if (v.major > 1 || (v.major === 1 && v.minor >= 2)) return true;
+        break;
       case 'Hyper':
-        return v.major >= 3;
-      case 'alacritty':
-        return v.major >= 0 && v.minor >= 11;
-      case 'kitty':
-        return v.major >= 0 && v.minor >= 19;
-      default:
-        return false;
+        if (v.major >= 3) return true;
+        break;
     }
+    // positive-only: an unknown program, or a known one that failed its version
+    // gate, falls through to the TERM / COLORTERM / TERMINAL_EMULATOR /
+    // standalone-variable checks below instead of answering for them.
   }
 
   // Check TERM variable
