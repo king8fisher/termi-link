@@ -52,7 +52,7 @@ function atLeast(v: Version, floor: string): boolean {
 }
 
 // Check if any of the environment variables exist
-function checkAllEnvs(vars: string[]): boolean {
+function hasAnyEnv(vars: string[]): boolean {
   return vars.some((v) => hasEnv(v));
 }
 
@@ -191,7 +191,7 @@ function supportsHyperlinks(): boolean {
   }
 
   // Check standalone environment variables
-  if (checkAllEnvs(ENVIRONMENT_VARIABLES)) {
+  if (hasAnyEnv(ENVIRONMENT_VARIABLES)) {
     return true;
   }
 
