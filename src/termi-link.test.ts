@@ -2,6 +2,21 @@ import path from "path";
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { isSupported, terminalLink } from './termi-link';
 
+// Local SGR helpers rather than a colour devDependency: chalk and picocolors
+// auto-detect colour support and emit empty strings when stdout is not a TTY,
+// which is exactly the case under vitest. Every byte-level assertion below
+// would then compare '' + url + '' against itself and verify nothing.
+const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
+const italic = (s: string) => `\x1b[3m${s}\x1b[0m`;
+const underline = (s: string) => `\x1b[4m${s}\x1b[0m`;
+const red = (s: string) => `\x1b[31m${s}\x1b[0m`;
+const blue = (s: string) => `\x1b[34m${s}\x1b[0m`;
+const bgYellow = (s: string) => `\x1b[43m${s}\x1b[0m`;
+const c256 = (s: string) => `\x1b[38;5;208m${s}\x1b[0m`;
+const truecolor = (s: string) => `\x1b[38;2;255;128;0m${s}\x1b[0m`;
+
+const REPO_URL = 'https://github.com/king8fisher/termi-link';
+
 const testAll = (input: string, expectedHyperlink: string, expectedNoHyperlink: string) => {
   if (isSupported()) {
     expect(input).toBe(expectedHyperlink)
@@ -52,12 +67,27 @@ function tests(setAsSupported: boolean) {
     expect(isSupported()).toBe(setAsSupported);
   });
 
+  // Printed, not asserted: the byte-level contract is covered by the
+  // 'url display decoration' suite, so this block exists to be read in a real
+  // terminal. The link text should be styled, the links clickable, and no
+  // stray `[34m`-style residue should appear anywhere.
   test('console', () => {
-    console.log(terminalLink('', 'https://github.com/redwoodjs/redwood/releases'));
-    console.log(terminalLink('https://github.com/redwoodjs/redwood/releases',
-      'https://github.com/redwoodjs/redwood/releases'));
+    console.log("terminalLink('', REPO_URL):");
+    console.log(terminalLink('', REPO_URL));
+    console.log('terminalLink(REPO_URL, REPO_URL):');
+    console.log(terminalLink(REPO_URL, REPO_URL));
     const pathToFile = path.resolve(__dirname, 'termi-link.test.ts').split(path.sep).join(path.posix.sep);
+    console.log("terminalLink('file://termi-link.test.ts', 'file://' + pathToFile):");
     console.log(terminalLink('file://termi-link.test.ts', 'file://' + pathToFile));
+
+    console.log("terminalLink(red('termi-link'), blue(REPO_URL)):");
+    console.log(terminalLink(red('termi-link'), blue(REPO_URL)));
+    console.log("red(terminalLink('termi-link', REPO_URL)):");
+    console.log(red(terminalLink('termi-link', REPO_URL)));
+    console.log("terminalLink('', blue(REPO_URL)):");
+    console.log(terminalLink('', blue(REPO_URL)));
+    console.log("terminalLink(bold('termi-link'), underline(REPO_URL)):");
+    console.log(terminalLink(bold('termi-link'), underline(REPO_URL)));
   });
 
   test('empty text', () => {
@@ -536,7 +566,7 @@ describe('fallback format contract', () => {
 
   // The sanitization guarantee has to hold on every path, not just the default
   // one — a custom fallback receives the url already stripped, because callers
-  // have no way to sanitize it themselves (`sanitizeUrl` is not exported).
+  // have no way to sanitize it themselves (`splitUrl` is not exported).
   test('a custom fallback receives the sanitized url', () => {
     let received = '';
     const output = terminalLink('Hi', 'https://ex\x07am\x1bple.com', {
@@ -644,3 +674,192 @@ describe('url encoding contract', () => {
   });
 });
 
+
+// The `url` argument may carry SGR decoration, so it is split into a
+// decoration-free OSC 8 target and a decoration-preserving display form. That
+// lets terminalLink(red(text), blue(url)) render both colours without letting
+// an escape byte reach — and corrupt — the link target.
+describe('url display decoration', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  type Options = Parameters<typeof terminalLink>[2];
+
+  const supported = (text: string, url: string, options?: Options) => {
+    process.env.TERMI_LINK_HYPERLINK = 'true';
+    return terminalLink(text, url, options);
+  };
+
+  const unsupported = (text: string, url: string, options?: Options) => {
+    process.env.TERMI_LINK_HYPERLINK = 'false';
+    return terminalLink(text, url, options);
+  };
+
+  // Splits `\x1b]8;;<target>\x07<display>\x1b]8;;\x07` so the two halves can be
+  // asserted on separately.
+  const osc8 = (output: string) => {
+    const match = /^\x1b\]8;;([^\x07]*)\x07([\s\S]*)\x1b\]8;;\x07$/.exec(output);
+    if (!match) throw new Error(`not an OSC 8 sequence: ${JSON.stringify(output)}`);
+    return { target: match[1], display: match[2] };
+  };
+
+  const wrappers: [string, (s: string) => string][] = [
+    ['bold', bold],
+    ['italic', italic],
+    ['underline', underline],
+    ['red', red],
+    ['bgYellow', bgYellow],
+    ['c256', c256],
+    ['truecolor', truecolor],
+    ['combined', (s) => `\x1b[1;3;34m${s}\x1b[0m`],
+  ];
+
+  test.each(wrappers)('the OSC 8 target drops %s decoration', (_name, wrap) => {
+    const { target } = osc8(supported('link', wrap(REPO_URL)));
+    expect(target).toBe(REPO_URL);
+    expect(target).not.toContain('\x1b');
+    expect(target).not.toMatch(/\[[\d;]*m/);
+  });
+
+  test.each(wrappers)('the fallback keeps %s decoration around the url', (_name, wrap) => {
+    const decorated = wrap(REPO_URL);
+    expect(unsupported('link', decorated)).toBe(`link ${decorated}`);
+  });
+
+  test('a bare reset on either side leaves the target undecorated', () => {
+    expect(osc8(supported('link', `\x1b[m${REPO_URL}`)).target).toBe(REPO_URL);
+    expect(osc8(supported('link', `${REPO_URL}\x1b[m`)).target).toBe(REPO_URL);
+    expect(osc8(supported('link', `\x1b[m${REPO_URL}\x1b[m`)).target).toBe(REPO_URL);
+  });
+
+  test('the fallback renders text and url in two distinct colours', () => {
+    expect(unsupported(red('termi-link'), blue(REPO_URL)))
+      .toBe(`${red('termi-link')} ${blue(REPO_URL)}`);
+  });
+
+  // The url is not rendered on the supported path when `text` is non-empty, so
+  // its decoration has nowhere to go and is discarded rather than leaked.
+  test('the supported path keeps the text colour and discards the url colour', () => {
+    const { target, display } = osc8(supported(red('termi-link'), blue(REPO_URL)));
+    expect(target).toBe(REPO_URL);
+    expect(display).toBe(red('termi-link'));
+    expect(display).not.toContain('\x1b[34m');
+  });
+
+  test('an empty text falls back to the decorated url exactly once', () => {
+    const output = unsupported('', blue(REPO_URL));
+    expect(output).toBe(blue(REPO_URL));
+    expect(output.split(REPO_URL)).toHaveLength(2);
+  });
+
+  test('an empty text renders the decorated url as the display span', () => {
+    const { target, display } = osc8(supported('', blue(REPO_URL)));
+    expect(target).toBe(REPO_URL);
+    expect(display).toBe(blue(REPO_URL));
+  });
+
+  // Only SGR is display decoration. Every other CSI moves the cursor or clears
+  // the screen, so it is dropped whole from both forms rather than printed.
+  test.each(['\x1b[?25l', '\x1b[2J', '\x1b[1A', '\x1b[1;40r'])(
+    'the non-SGR sequence %j is dropped from both target and display',
+    (seq) => {
+      const { target, display } = osc8(supported('', `${seq}${REPO_URL}`));
+      expect(target).toBe(REPO_URL);
+      expect(display).toBe(REPO_URL);
+      expect(display).not.toContain('[');
+      expect(unsupported('', `${seq}${REPO_URL}`)).toBe(REPO_URL);
+    },
+  );
+
+  test('an undecorated call is byte-identical to the undecorated contract', () => {
+    expect(supported('Hello', 'https://example.com'))
+      .toBe('\x1b]8;;https://example.com\x07Hello\x1b]8;;\x07');
+    expect(unsupported('Hello', 'https://example.com'))
+      .toBe('Hello https://example.com');
+    expect(unsupported('', 'https://example.com')).toBe('https://example.com');
+  });
+
+  test('decoration in the middle of the url stays in the display only', () => {
+    const url = 'https://\x1b[31mx.com\x1b[0m/path';
+    const { target, display } = osc8(supported('', url));
+    expect(target).toBe('https://x.com/path');
+    expect(display).toBe(url);
+  });
+
+  test('two adjacent sequences both survive into the display', () => {
+    const url = `\x1b[1m\x1b[34m${REPO_URL}`;
+    const { target, display } = osc8(supported('', url));
+    expect(target).toBe(REPO_URL);
+    expect(display).toBe(url);
+  });
+
+  test('strictUrlEncoding encodes inside a decorated url and leaves the decoration alone', () => {
+    const { target, display } = osc8(
+      supported('', blue('https://e.com/My Documents'), { strictUrlEncoding: true }),
+    );
+    expect(target).toBe('https://e.com/My%20Documents');
+    expect(display).toBe(blue('https://e.com/My%20Documents'));
+  });
+
+  test('a custom fallback receives the display form of the url', () => {
+    let received = '';
+    unsupported('Hi', blue(REPO_URL), {
+      fallback: (_text, url) => (received = url),
+    });
+    expect(received).toBe(blue(REPO_URL));
+  });
+
+  test('a custom fallback still receives a control-character-free url', () => {
+    let received = '';
+    unsupported('Hi', blue('https://ex\x07ample.com'), {
+      fallback: (_text, url) => (received = url),
+    });
+    expect(received).toBe(blue('https://example.com'));
+    expect(received).not.toContain('\x07');
+  });
+
+  test('wrapping the whole return value leaves the OSC 8 pair intact', () => {
+    expect(red(supported('termi-link', REPO_URL)))
+      .toBe(`\x1b[31m\x1b]8;;${REPO_URL}\x07termi-link\x1b]8;;\x07\x1b[0m`);
+    expect(red(unsupported('termi-link', REPO_URL)))
+      .toBe(`\x1b[31mtermi-link ${REPO_URL}\x1b[0m`);
+  });
+
+  test('a BEL inside a decorated url cannot terminate the URI early', () => {
+    const { target, display } = osc8(supported('', blue('https://e.com/a\x07b')));
+    expect(target).toBe('https://e.com/ab');
+    expect(display).toBe(blue('https://e.com/ab'));
+  });
+
+  test('a lone ESC not followed by [ is removed from a decorated url', () => {
+    const { target, display } = osc8(supported('', blue('https://e.co\x1bm/a')));
+    expect(target).toBe('https://e.com/a');
+    expect(display).toBe(blue('https://e.com/a'));
+  });
+
+  test('bytes above 126 are percent-encoded inside a decorated url', () => {
+    const { target, display } = osc8(supported('', blue('https://e.com/café')));
+    expect(target).toBe('https://e.com/caf%C3%A9');
+    expect(display).toBe(blue('https://e.com/caf%C3%A9'));
+  });
+
+  test('an emoji inside a decorated url does not throw', () => {
+    expect(() => supported('', blue('https://e.com/🎉'))).not.toThrow();
+    expect(osc8(supported('', blue('https://e.com/🎉'))).target)
+      .toBe('https://e.com/%F0%9F%8E%89');
+  });
+
+  test('a percent-encoded escape lookalike is left alone', () => {
+    const url = 'https://e.com/%1b[31m';
+    const { target, display } = osc8(supported('', blue(url)));
+    expect(target).toBe(url);
+    expect(display).toBe(blue(url));
+  });
+});

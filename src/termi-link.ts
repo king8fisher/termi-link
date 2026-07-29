@@ -189,7 +189,12 @@ export const ANSI_RESET = "\u001b[0m";
 // encoding is opt-in rather than automatic.
 const INVALID_URI_CHARS = /[ "<>\\^`{|}]/g;
 
-function sanitizeUrl(url: string, strict = false): string {
+// A CSI sequence: ESC [, parameter bytes, intermediate bytes, one final byte.
+// SGR — the subset ending in `m` — is display decoration a caller may legitimately
+// wrap the url in; every other final byte moves the cursor or clears the screen.
+const CSI_SEQUENCE = /\x1b\[[0-?]*[ -\/]*[@-~]/g;
+
+function sanitizeCore(url: string, strict = false): string {
   // Remove control characters. In an OSC 8 sequence a BEL would end the URI
   // early and an ESC could open a new sequence, so these are dropped rather
   // than encoded.
@@ -215,13 +220,37 @@ function sanitizeUrl(url: string, strict = false): string {
   return encoded.replace(INVALID_URI_CHARS, (c) => encodeURIComponent(c));
 }
 
+// Split a url that may carry SGR decoration into the bare `target` that feeds
+// the OSC 8 URI and the decorated `display` that is actually printed.
+//
+// Order matters: each CSI match is consumed before the control-character strip
+// runs on the plain run around it, so a dropped sequence leaves no `[34m`-style
+// residue behind. A lone ESC that is not a CSI introducer never matches here and
+// is still removed by the per-run strip.
+function splitUrl(url: string, strict = false): { target: string, display: string } {
+  let target = '';
+  let display = '';
+  let cursor = 0;
+  for (const match of url.matchAll(CSI_SEQUENCE)) {
+    const run = sanitizeCore(url.slice(cursor, match.index), strict);
+    target += run;
+    display += run;
+    if (match[0].endsWith('m')) {
+      display += match[0];
+    }
+    cursor = match.index + match[0].length;
+  }
+  const tail = sanitizeCore(url.slice(cursor), strict);
+  return { target: target + tail, display: display + tail };
+}
+
 /**
  * Creates a clickable terminal link sequence of characters. The url provided will be sanitized: control characters are removed, and bytes above the 32-126 range OSC 8 permits are percent-encoded. Encoding within ASCII stays with the caller.
- * 
+ *
  * @param text The text to display, if an empty string `""` is passed, the text will be the same as the url, and in the fallback case, the link will be the only thing displayed.
- * @param url The URL to link to
+ * @param url The URL to link to. It may carry SGR decoration — `terminalLink(red(text), blue(url))` is valid — which is kept for display and never reaches the link target, so an escape byte cannot corrupt the link. Any non-SGR escape sequence is dropped from both. On a supported terminal the url is not rendered when `text` is non-empty, so its decoration has no visible effect there.
  * @param options Optional parameters
- * @param options.fallback Override the default fallback or disable it. When a function is provided, it receives the `text` and the sanitized `url` as parameters and is expected to return a string. The url is sanitized before it is passed, so a custom fallback cannot reintroduce control characters.
+ * @param options.fallback Override the default fallback or disable it. When a function is provided, it receives the `text` and the sanitized `url` as parameters and is expected to return a string. The url is sanitized before it is passed, so a custom fallback cannot reintroduce control characters. Any SGR decoration on the url survives into the value it receives, because it is a display hook.
  * If set to `false`, the `text` is returned unchanged on an unsupported terminal — the URL is simply not appended. This matches `terminal-link`.
  * @param options.strictUrlEncoding Also percent-encode the printable ASCII characters RFC 3986 forbids in a URI: space, double quote, angle brackets, backslash, caret, backtick, braces and pipe. Defaults to `false`, which leaves them raw. A raw space is legal to OSC 8 but truncates the link in the plain-text fallback, because URL detectors stop at whitespace.
  * @returns Formatted terminal link string
@@ -232,23 +261,23 @@ export function terminalLink(text: string, url: string, options?: {
 } | undefined): string {
   const { fallback = null, strictUrlEncoding = false } = options || {};
   //const textColor = parseColor(color);
+  const { target, display } = splitUrl(url, strictUrlEncoding);
   if (supportsHyperlinks()) {
     //return `\x1b]8;;${url}\x07${textColor}${text || url}\x1b]8;;\x07`;
-    const sanitized = sanitizeUrl(url, strictUrlEncoding);
-    return `\x1b]8;;${sanitized}\x07${text || sanitized}\x1b]8;;\x07`;
+    return `\x1b]8;;${target}\x07${text || display}\x1b]8;;\x07`;
   }
   if (fallback == null) {
     if (!text) {
-      return `${sanitizeUrl(url, strictUrlEncoding)}`;
+      return display;
     }
     //return `${textColor}${text} (${url})`;
     // Space-delimited, not wrapped in parens: a linkifier that treats a URL as
     // a run of non-whitespace would otherwise capture the closing paren.
-    return `${text} ${sanitizeUrl(url, strictUrlEncoding)}`;
+    return `${text} ${display}`;
   } else if (fallback === false) {
     return text;
   } else {
-    return fallback(text, sanitizeUrl(url, strictUrlEncoding));
+    return fallback(text, display);
   }
 }
 
