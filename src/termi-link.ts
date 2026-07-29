@@ -1,4 +1,3 @@
-
 // Interface for version information
 interface Version {
   major: number;
@@ -7,11 +6,7 @@ interface Version {
 }
 
 // Environment variables that indicate hyperlink support
-const ENVIRONMENT_VARIABLES = [
-  'DOMTERM',
-  'WT_SESSION',
-  'KONSOLE_VERSION',
-];
+const ENVIRONMENT_VARIABLES = ["DOMTERM", "WT_SESSION", "KONSOLE_VERSION"];
 
 // Parse version string into Version object
 function parseVersion(version: string): Version {
@@ -19,7 +14,7 @@ function parseVersion(version: string): Version {
   // its point releases `3.5a`, `3.6b` — and the leading digits are the version.
   // A wholly non-numeric component still yields NaN and still fails its gate.
   const [major = 0, minor = 0, patch = 0] = version
-    .split('.')
+    .split(".")
     .map((component) => parseInt(component, 10));
   return { major, minor, patch };
 }
@@ -31,7 +26,7 @@ function hasEnv(name: string): boolean {
 
 // Get environment variable value
 function getEnv(name: string): string {
-  return process.env[name] || '';
+  return process.env[name] || "";
 }
 
 // Check if environment variable matches any of the given values
@@ -58,16 +53,16 @@ function atLeast(v: Version, floor: string): boolean {
 
 // Check if any of the environment variables exist
 function checkAllEnvs(vars: string[]): boolean {
-  return vars.some(v => hasEnv(v));
+  return vars.some((v) => hasEnv(v));
 }
 
 // Check if current terminal supports hyperlinks
 function supportsHyperlinks(): boolean {
   // Force hyperlinks if environment variable is set
-  if (matchesEnv('TERMI_LINK_HYPERLINK', ['1', 'true', 'always', 'enabled'])) {
+  if (matchesEnv("TERMI_LINK_HYPERLINK", ["1", "true", "always", "enabled"])) {
     return true;
   }
-  if (matchesEnv('TERMI_LINK_HYPERLINK', ['0', 'false', 'never', 'disabled'])) {
+  if (matchesEnv("TERMI_LINK_HYPERLINK", ["0", "false", "never", "disabled"])) {
     return false;
   }
 
@@ -86,58 +81,60 @@ function supportsHyperlinks(): boolean {
   // variable carries a version to gate a pre-0.21.0 Zellij out with. A
   // presence-only branch could only restate what inheritance says, or claim a
   // terminal we cannot see is capable.
-  if (hasEnv('TMUX')) {
+  if (hasEnv("TMUX")) {
     // tmux relays OSC 8 from 3.4, and from 3.2 it reports itself as
     // TERM_PROGRAM=tmux with its own version, so the gate is an ordinary one.
     // Whether the *outer* terminal can render the link is tmux's question, not
     // ours: it gates emission on the `hyperlinks` terminal feature (`Hls`).
-    return getEnv('TERM_PROGRAM') === 'tmux'
-      && atLeast(parseVersion(getEnv('TERM_PROGRAM_VERSION')), '3.4');
+    return (
+      getEnv("TERM_PROGRAM") === "tmux" &&
+      atLeast(parseVersion(getEnv("TERM_PROGRAM_VERSION")), "3.4")
+    );
   }
 
   // VTE-based terminals
-  if (hasEnv('VTE_VERSION')) {
-    const v = parseVersion(getEnv('VTE_VERSION'));
+  if (hasEnv("VTE_VERSION")) {
+    const v = parseVersion(getEnv("VTE_VERSION"));
     return v.major > 5000;
   }
 
   // Terminals with TERM_PROGRAM variable
-  if (hasEnv('TERM_PROGRAM')) {
-    const v = parseVersion(getEnv('TERM_PROGRAM_VERSION'));
-    const term = getEnv('TERM_PROGRAM');
+  if (hasEnv("TERM_PROGRAM")) {
+    const v = parseVersion(getEnv("TERM_PROGRAM_VERSION"));
+    const term = getEnv("TERM_PROGRAM");
 
     switch (term) {
-      case 'iTerm.app':
+      case "iTerm.app":
         if (v.major > 3 || (v.major === 3 && v.minor >= 1)) return true;
         break;
-      case 'WezTerm':
+      case "WezTerm":
         if (v.major >= 20200620) return true;
         break;
-      case 'vscode':
+      case "vscode":
         if (v.major > 1 || (v.major === 1 && v.minor >= 72)) return true;
         break;
-      case 'ghostty':
+      case "ghostty":
         if (v.major >= 1) return true;
         break;
       // Zed has only ever shipped 0.x, so any major-version gate would reject
       // every real release; upstream supports-hyperlinks matches it ungated.
-      case 'zed':
+      case "zed":
         return true;
-      case 'terminology':
+      case "terminology":
         if (v.major > 1 || (v.major === 1 && v.minor >= 2)) return true;
         break;
       // Hyper below 4 renders OSC 8 as non-clickable pseudo-links: it ships
       // xterm.js < 5, which has no OSC 8 support at all.
-      case 'Hyper':
+      case "Hyper":
         if (v.major >= 4) return true;
         break;
     }
 
     // Matched by substring rather than by an exact value, so they cannot join
     // the switch above.
-    if (envIncludes('TERM_PROGRAM', 'mintty') && atLeast(v, '2.9.7')) return true;
-    if (envIncludes('TERM_PROGRAM', 'tabby')) return true;
-    if (envIncludes('TERM_PROGRAM', 'rio') && atLeast(v, '0.0.28')) return true;
+    if (envIncludes("TERM_PROGRAM", "mintty") && atLeast(v, "2.9.7")) return true;
+    if (envIncludes("TERM_PROGRAM", "tabby")) return true;
+    if (envIncludes("TERM_PROGRAM", "rio") && atLeast(v, "0.0.28")) return true;
 
     // positive-only: an unknown program, or a known one that failed its version
     // gate, falls through to the TERM / COLORTERM / TERMINAL_EMULATOR /
@@ -145,31 +142,33 @@ function supportsHyperlinks(): boolean {
   }
 
   // Check TERM variable
-  if (matchesEnv('TERM', ['xterm-kitty', 'alacritty', 'alacritty-direct', 'xterm-ghostty'])) {
+  if (matchesEnv("TERM", ["xterm-kitty", "alacritty", "alacritty-direct", "xterm-ghostty"])) {
     return true;
   }
 
   // Kept out of the list above, which is exact-match: Foot sets either `foot`
   // or a value carrying it as a substring.
-  if (envIncludes('TERM', 'foot')) {
+  if (envIncludes("TERM", "foot")) {
     return true;
   }
 
   // Check COLORTERM variable
-  if (matchesEnv('COLORTERM', ['xfce4-terminal'])) {
+  if (matchesEnv("COLORTERM", ["xfce4-terminal"])) {
     return true;
   }
 
   // Check JetBrains terminals
-  if (matchesEnv('TERMINAL_EMULATOR', ['JetBrains-JediTerm'])) {
+  if (matchesEnv("TERMINAL_EMULATOR", ["JetBrains-JediTerm"])) {
     return true;
   }
 
   // Contour is the only terminal keyed off neither TERM_PROGRAM, TERM,
   // COLORTERM nor TERMINAL_EMULATOR, so TERMINAL_VERSION_TRIPLE is read here
   // and nowhere else.
-  if (envIncludes('TERMINAL_NAME', 'contour')
-    && atLeast(parseVersion(getEnv('TERMINAL_VERSION_TRIPLE')), '0.1.0')) {
+  if (
+    envIncludes("TERMINAL_NAME", "contour") &&
+    atLeast(parseVersion(getEnv("TERMINAL_VERSION_TRIPLE")), "0.1.0")
+  ) {
     return true;
   }
 
@@ -192,7 +191,7 @@ const INVALID_URI_CHARS = /[ "<>\\^`{|}]/g;
 // A CSI sequence: ESC [, parameter bytes, intermediate bytes, one final byte.
 // SGR is display decoration a caller may legitimately wrap the url in; every
 // other CSI moves the cursor, clears the screen or sets a terminal mode.
-const CSI_SEQUENCE = /\x1b\[[0-?]*[ -\/]*[@-~]/g;
+const CSI_SEQUENCE = /\x1b\[[0-?]*[ -/]*[@-~]/g;
 
 // SGR proper: parameter bytes only, no private-parameter introducer
 // (`<` `=` `>` `?`) and no intermediate bytes. `CSI > 4 ; 2 m` ends in `m` but
@@ -204,7 +203,7 @@ function sanitizeCore(url: string, strict = false): string {
   // Remove control characters. In an OSC 8 sequence a BEL would end the URI
   // early and an ESC could open a new sequence, so these are dropped rather
   // than encoded.
-  const stripped = url.replace(/[\x00-\x1F\x7F]/g, '');
+  const stripped = url.replace(/[\x00-\x1F\x7F]/g, "");
   // OSC 8 requires the URI to stay inside bytes 32-126. Anything above that is
   // unambiguously data rather than a delimiter, so percent-encoding it is
   // lossless. Bytes 32-126 are left alone: only the caller knows whether an `&`
@@ -215,7 +214,7 @@ function sanitizeCore(url: string, strict = false): string {
     try {
       return encodeURIComponent(c);
     } catch {
-      return '';
+      return "";
     }
   });
   if (!strict) {
@@ -233,9 +232,9 @@ function sanitizeCore(url: string, strict = false): string {
 // runs on the plain run around it, so a dropped sequence leaves no `[34m`-style
 // residue behind. A lone ESC that is not a CSI introducer never matches here and
 // is still removed by the per-run strip.
-function splitUrl(url: string, strict = false): { target: string, display: string } {
-  let target = '';
-  let display = '';
+function splitUrl(url: string, strict = false): { target: string; display: string } {
+  let target = "";
+  let display = "";
   let cursor = 0;
   for (const match of url.matchAll(CSI_SEQUENCE)) {
     const run = sanitizeCore(url.slice(cursor, match.index), strict);
@@ -261,10 +260,16 @@ function splitUrl(url: string, strict = false): { target: string, display: strin
  * @param options.strictUrlEncoding Also percent-encode the printable ASCII characters RFC 3986 forbids in a URI: space, double quote, angle brackets, backslash, caret, backtick, braces and pipe. Defaults to `false`, which leaves them raw. A raw space is legal to OSC 8 but truncates the link in the plain-text fallback, because URL detectors stop at whitespace.
  * @returns Formatted terminal link string
  */
-export function terminalLink(text: string, url: string, options?: {
-  fallback?: false | ((text: string, url: string) => string),
-  strictUrlEncoding?: boolean,
-} | undefined): string {
+export function terminalLink(
+  text: string,
+  url: string,
+  options?:
+    | {
+        fallback?: false | ((text: string, url: string) => string);
+        strictUrlEncoding?: boolean;
+      }
+    | undefined,
+): string {
   const { fallback = null, strictUrlEncoding = false } = options || {};
   const { target, display } = splitUrl(url, strictUrlEncoding);
   if (supportsHyperlinks()) {

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.6/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    // tsconfig.json and package.json are excluded, not overlooked. Both are
+    // tool-managed: tsconfig.json is the stock TypeScript scaffold whose
+    // aligned trailing comments Biome re-wraps as `"k": "v" /* … */,`, losing
+    // the column layout for no gain, and package.json is rewritten by pnpm on
+    // every add/remove, so formatting it invites a fight between two tools.
+    "includes": ["src/**/*.ts", "*.ts", "*.json", "!tsconfig.json", "!package.json"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "style": {
+        "useImportType": "error",
+        "useNodejsImportProtocol": "error"
+      },
+      "correctness": {
+        "noUnusedImports": "error",
+        "noUnusedVariables": "warn"
+      },
+      "suspicious": {
+        // This library's entire subject matter is ANSI escape sequences, which
+        // are control characters by definition: CSI_SEQUENCE and SGR_SEQUENCE
+        // must match \x1b, and the suite asserts on \x07 and \x1b directly.
+        // The rule is correct in general and wrong for every regex in this
+        // repository, so it is off globally rather than suppressed per line.
+        "noControlCharactersInRegex": "off"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all",
+      "arrowParentheses": "always"
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  }
+}
