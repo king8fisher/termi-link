@@ -564,9 +564,10 @@ describe('fallback format contract', () => {
     expect(terminalLink('', 'https://example.com')).toBe('https://example.com');
   });
 
-  // The sanitization guarantee has to hold on every path, not just the default
-  // one — a custom fallback receives the url already stripped, because callers
-  // have no way to sanitize it themselves (`splitUrl` is not exported).
+  // The control-free guarantee is the OSC 8 target's; a custom fallback still
+  // receives a stripped display value, because callers have no way to sanitize
+  // it themselves (`splitUrl` is not exported). The display value keeps
+  // preserved SGR by design — see the `url display decoration` suite.
   test('a custom fallback receives the sanitized url', () => {
     let received = '';
     const output = terminalLink('Hi', 'https://ex\x07am\x1bple.com', {
@@ -816,13 +817,57 @@ describe('url display decoration', () => {
     expect(received).toBe(blue(REPO_URL));
   });
 
-  test('a custom fallback still receives a control-character-free url', () => {
+  // The control-character guarantee is scoped to the OSC 8 target. The display
+  // value a custom fallback receives is control-free except for the SGR the
+  // library preserves, so the ESC bytes below are deliberate, not a leak.
+  test('preserved SGR reaches a custom fallback', () => {
+    let received = '';
+    unsupported('Hi', blue(REPO_URL), {
+      fallback: (_text, url) => (received = url),
+    });
+    expect(received).toBe(blue(REPO_URL));
+    expect(received).toContain('\x1b');
+  });
+
+  test('a BEL does not reach a custom fallback', () => {
     let received = '';
     unsupported('Hi', blue('https://ex\x07ample.com'), {
       fallback: (_text, url) => (received = url),
     });
     expect(received).toBe(blue('https://example.com'));
     expect(received).not.toContain('\x07');
+  });
+
+  test('a non-SGR CSI does not reach a custom fallback', () => {
+    let received = '';
+    unsupported('Hi', blue('https://e\x1b[2Jcom'), {
+      fallback: (_text, url) => (received = url),
+    });
+    expect(received).toBe(blue('https://ecom'));
+    expect(received).not.toContain('[2J');
+  });
+
+  // The only ESC bytes left here are the two the `blue` wrapper contributes, so
+  // this asserts the exact value rather than the absence of ESC.
+  test('a lone ESC that is not a CSI introducer does not reach a custom fallback', () => {
+    let received = '';
+    unsupported('Hi', blue('https://e\x1bcom'), {
+      fallback: (_text, url) => (received = url),
+    });
+    expect(received).toBe(blue('https://ecom'));
+  });
+
+  // The contrast that makes the split legible: none of the four urls above
+  // leaves any control character in the target.
+  test.each([
+    REPO_URL,
+    'https://ex\x07ample.com',
+    'https://e\x1b[2Jcom',
+    'https://e\x1bcom',
+  ])('the target carries no control-character exception for %j', (url) => {
+    const { target } = osc8(supported('', blue(url)));
+    expect(target).not.toContain('\x1b');
+    expect(target).not.toContain('\x07');
   });
 
   test('wrapping the whole return value leaves the OSC 8 pair intact', () => {
