@@ -85,8 +85,12 @@ jobs:
         run: |
           set -euo pipefail
           tarball='${{ steps.pack.outputs.tarball }}'
+          # Captured once, then searched with a here-string: a quiet grep exits on
+          # its match, and under `pipefail` the SIGPIPE that kills the producer
+          # would turn a found entry into a reported-missing one.
+          listing="$(tar tzf "$tarball")"
           for entry in dist/index.js dist/index.mjs dist/index.d.ts dist/index.d.mts; do
-            if ! tar tzf "$tarball" | grep -qx "package/$entry"; then
+            if ! grep -Fxq "package/$entry" <<< "$listing"; then
               echo "::error::packed tarball is missing $entry — check the tsup entry points and the package.json files field"
               exit 1
             fi
@@ -171,7 +175,11 @@ jobs:
             fi
             local trace
             trace="$(./node_modules/.bin/tsc $tsc_flags --traceResolution consumer.ts)"
-            if ! printf '%s\n' "$trace" | grep -qF "Package ID 'termi-link/$expected@"; then
+            # Here-string, not a pipeline: today the matched line happens to be the
+            # trace's last, but a quiet grep that exits earlier would SIGPIPE the
+            # producer and fail the step under `pipefail`. The diagnostic grep
+            # below is not quiet, so it consumes the whole trace and is safe.
+            if ! grep -Fq "Package ID 'termi-link/$expected@" <<< "$trace"; then
               echo "::error::the $dir consumer resolved termi-link's types to the wrong declaration — expected $expected"
               printf '%s\n' "$trace" | grep -F 'was successfully resolved to' || true
               exit 1
