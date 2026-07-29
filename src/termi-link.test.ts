@@ -2,8 +2,8 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { isSupported, terminalLink } from "./termi-link";
 
-// Local SGR helpers rather than a colour devDependency: chalk and picocolors
-// auto-detect colour support and emit empty strings when stdout is not a TTY,
+// Local SGR helpers rather than a color devDependency: chalk and picocolors
+// auto-detect color support and emit empty strings when stdout is not a TTY,
 // which is exactly the case under vitest. Every byte-level assertion below
 // would then compare '' + url + '' against itself and verify nothing.
 const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
@@ -794,7 +794,7 @@ describe("url encoding contract", () => {
 
 // The `url` argument may carry SGR decoration, so it is split into a
 // decoration-free OSC 8 target and a decoration-preserving display form. That
-// lets terminalLink(red(text), blue(url)) render both colours without letting
+// lets terminalLink(red(text), blue(url)) render both colors without letting
 // an escape byte reach — and corrupt — the link target.
 describe("url display decoration", () => {
   const originalEnv = process.env;
@@ -856,7 +856,7 @@ describe("url display decoration", () => {
     expect(osc8(supported("link", `\x1b[m${REPO_URL}\x1b[m`)).target).toBe(REPO_URL);
   });
 
-  test("the fallback renders text and url in two distinct colours", () => {
+  test("the fallback renders text and url in two distinct colors", () => {
     expect(unsupported(red("termi-link"), blue(REPO_URL))).toBe(
       `${red("termi-link")} ${blue(REPO_URL)}`,
     );
@@ -864,7 +864,7 @@ describe("url display decoration", () => {
 
   // The url is not rendered on the supported path when `text` is non-empty, so
   // its decoration has nowhere to go and is discarded rather than leaked.
-  test("the supported path keeps the text colour and discards the url colour", () => {
+  test("the supported path keeps the text color and discards the url color", () => {
     const { target, display } = osc8(supported(red("termi-link"), blue(REPO_URL)));
     expect(target).toBe(REPO_URL);
     expect(display).toBe(red("termi-link"));
@@ -1121,10 +1121,10 @@ describe("url display decoration", () => {
       expect(display).not.toContain("\x1b");
     });
 
-    // The narrowing must not overshoot. T.416 sub-parameter colour uses `:`
+    // The narrowing must not overshoot. T.416 sub-parameter color uses `:`
     // separators and is genuine SGR that some terminals emit, so it stays in
     // the display like any other decoration.
-    test("a T.416 sub-parameter colour is genuine SGR and survives into the display", () => {
+    test("a T.416 sub-parameter color is genuine SGR and survives into the display", () => {
       const seq = "\x1b[38:2::255:128:0m";
       const { target, display } = osc8(supported("", seq + REPO_URL));
       expect(target).toBe(REPO_URL);

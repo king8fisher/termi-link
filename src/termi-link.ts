@@ -214,7 +214,7 @@ const CSI_SEQUENCE = /\x1b\[[0-?]*[ -/]*[@-~]/g;
 // SGR proper: parameter bytes only, no private-parameter introducer
 // (`<` `=` `>` `?`) and no intermediate bytes. `CSI > 4 ; 2 m` ends in `m` but
 // sets keyboard reporting, so the final byte alone cannot classify a sequence.
-// `:` is admitted on purpose — T.416 sub-parameter colours are genuine SGR.
+// `:` is admitted on purpose — T.416 sub-parameter colors are genuine SGR.
 const SGR_SEQUENCE = /^\x1b\[[0-9;:]*m$/;
 
 function sanitizeCore(url: string, strict = false): string {
