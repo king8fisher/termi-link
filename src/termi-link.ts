@@ -190,9 +190,15 @@ export const ANSI_RESET = "\u001b[0m";
 const INVALID_URI_CHARS = /[ "<>\\^`{|}]/g;
 
 // A CSI sequence: ESC [, parameter bytes, intermediate bytes, one final byte.
-// SGR — the subset ending in `m` — is display decoration a caller may legitimately
-// wrap the url in; every other final byte moves the cursor or clears the screen.
+// SGR is display decoration a caller may legitimately wrap the url in; every
+// other CSI moves the cursor, clears the screen or sets a terminal mode.
 const CSI_SEQUENCE = /\x1b\[[0-?]*[ -\/]*[@-~]/g;
+
+// SGR proper: parameter bytes only, no private-parameter introducer
+// (`<` `=` `>` `?`) and no intermediate bytes. `CSI > 4 ; 2 m` ends in `m` but
+// sets keyboard reporting, so the final byte alone cannot classify a sequence.
+// `:` is admitted on purpose — T.416 sub-parameter colours are genuine SGR.
+const SGR_SEQUENCE = /^\x1b\[[0-9;:]*m$/;
 
 function sanitizeCore(url: string, strict = false): string {
   // Remove control characters. In an OSC 8 sequence a BEL would end the URI
@@ -235,7 +241,7 @@ function splitUrl(url: string, strict = false): { target: string, display: strin
     const run = sanitizeCore(url.slice(cursor, match.index), strict);
     target += run;
     display += run;
-    if (match[0].endsWith('m')) {
+    if (SGR_SEQUENCE.test(match[0])) {
       display += match[0];
     }
     cursor = match.index + match[0].length;

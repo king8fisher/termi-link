@@ -955,5 +955,57 @@ describe('url display decoration', () => {
       expect(target).toBe(REPO_URL);
       expect(display).toBe(blue(REPO_URL));
     });
+
+    // A fourth case of the same split: these end in `m` yet are not SGR, so the
+    // final byte alone cannot classify a sequence. Each carries either a
+    // private-parameter introducer (`<` `=` `>` `?`) or an intermediate byte,
+    // and each belongs with the non-SGR CSI above — dropped whole from both
+    // forms rather than printed.
+    const privateM: [string, string][] = [
+      ['XTMODKEYS', '\x1b[>4;2m'],
+      ['private ?', '\x1b[?1m'],
+      ['private =', '\x1b[=1m'],
+      ['private <', '\x1b[<1m'],
+      ['intermediate', '\x1b[ m'],
+    ];
+
+    test.each(privateM)('%s ends in m but is dropped from both target and display', (_label, seq) => {
+      const { target, display } = osc8(supported('', seq + REPO_URL));
+      expect(target).toBe(REPO_URL);
+      expect(display).toBe(REPO_URL);
+      expect(display).not.toContain('\x1b');
+    });
+
+    test.each(privateM)('%s is dropped from the fallback form', (_label, seq) => {
+      expect(unsupported('', seq + REPO_URL)).toBe(REPO_URL);
+    });
+
+    test.each(privateM)('%s does not reach a custom fallback', (_label, seq) => {
+      let received = '';
+      unsupported('Hi', seq + REPO_URL, {
+        fallback: (_text, url) => (received = url),
+      });
+      expect(received).toBe(REPO_URL);
+      expect(received).not.toContain('\x1b');
+    });
+
+    // The same assertion with the sequence trailing, so the classifier is not
+    // accidentally position-dependent.
+    test.each(privateM)('%s is dropped when it trails the url', (_label, seq) => {
+      const { target, display } = osc8(supported('', REPO_URL + seq));
+      expect(target).toBe(REPO_URL);
+      expect(display).toBe(REPO_URL);
+      expect(display).not.toContain('\x1b');
+    });
+
+    // The narrowing must not overshoot. T.416 sub-parameter colour uses `:`
+    // separators and is genuine SGR that some terminals emit, so it stays in
+    // the display like any other decoration.
+    test('a T.416 sub-parameter colour is genuine SGR and survives into the display', () => {
+      const seq = '\x1b[38:2::255:128:0m';
+      const { target, display } = osc8(supported('', seq + REPO_URL));
+      expect(target).toBe(REPO_URL);
+      expect(display).toBe(seq + REPO_URL);
+    });
   });
 });
