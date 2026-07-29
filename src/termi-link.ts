@@ -92,10 +92,18 @@ function supportsHyperlinks(): boolean {
     );
   }
 
-  // VTE-based terminals
+  // VTE-based terminals. Positive-only: VTE_VERSION describes the terminal a
+  // process was *launched from*, not the one receiving the escape sequence, so
+  // it is inherited by whatever runs inside — a kitty started from a
+  // gnome-terminal shell carries a stale value. A failed gate therefore means
+  // "nothing to say" rather than "no", and the checks below get their turn.
+  //
+  // VTE packs its version as major * 10000 + minor * 100 + micro, so 5000 is
+  // exactly 0.50.0 — the release that shipped OSC 8 and segfaulted on it. The
+  // comparison is strict on purpose: 0.50.0 itself is out.
   if (hasEnv("VTE_VERSION")) {
     const v = parseVersion(getEnv("VTE_VERSION"));
-    return v.major > 5000;
+    if (v.major > 5000) return true;
   }
 
   // Terminals with TERM_PROGRAM variable
