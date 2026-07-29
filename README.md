@@ -12,8 +12,11 @@ This library provides clickable terminal links for terminals that support them. 
   (`U+0000`–`U+001F` and `U+007F`) are stripped, and every remaining byte above
   the 32–126 range the
   [OSC 8 specification](https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda)
-  permits is percent-encoded. This holds on every path, including a custom
-  `fallback`. `terminal-link` interpolates the URL verbatim, so a `BEL` inside it
+  permits is percent-encoded. That is the OSC 8 target, and it is control-free on
+  every path. The display value — what the fallback prints, and what a custom
+  `fallback` receives — is control-free too, except for the SGR decoration the
+  library deliberately preserves.
+  `terminal-link` interpolates the URL verbatim, so a `BEL` inside it
   ends the sequence early, an `ESC` can start a new one, and a non-ASCII URL is
   emitted in a form the specification calls undefined.
 
@@ -81,7 +84,7 @@ value instead: `red(terminalLink(text, url))`.
   On an unsupported terminal:
   - default — `text url`, space-delimited, or just the URL when `text` is empty
   - `fallback: false` — `text` unchanged, with no URL appended
-  - `fallback: fn` — whatever `fn(text, url)` returns; `url` is passed already sanitized, with any SGR decoration preserved
+  - `fallback: fn` — whatever `fn(text, url)` returns; `url` is passed as the display value, so any SGR decoration is preserved while `BEL` and every non-SGR control character are gone
 
   The default keeps the URL delimited by whitespace so the terminal's own URL
   detector picks it up intact. Wrapping it in parens makes detectors that scan
@@ -122,7 +125,7 @@ terminalLink('example.com', 'https://example.com', { fallback: (_text, url) => `
     fallback: (text, url) => (text ? `${text} (${url})` : url)
     ```
     to keep the old format.
-  - **Breaking:** a custom `fallback` function now receives the sanitized url instead of the raw one. Previously control characters survived on this path, so the documented sanitization guarantee did not hold for custom fallbacks.
+  - **Breaking:** a custom `fallback` function now receives the sanitized url instead of the raw one. Previously control characters survived on this path, so the documented sanitization guarantee did not hold for custom fallbacks. Preserved SGR decoration is the one deliberate exception, since the value is for display.
   - urls now percent-encode every byte above the 32–126 range that OSC 8 permits, instead of emitting raw non-ASCII. Astral characters encode correctly and a lone surrogate is dropped rather than throwing.
   - add `strictUrlEncoding`, an opt-in that also percent-encodes the printable ASCII characters RFC 3986 forbids in a URI. Defaults to `false`, so existing output is unchanged. Turn it on if your URLs can contain spaces — a raw space truncates the link in the plain-text fallback.
   - the `url` argument may now carry SGR decoration, so `text` and the url can be coloured independently. **Breaking:** a decorated url previously emitted its escape sequence as literal URI text — `\x1b[34m` + url reached the terminal as `[34m` + url, a broken link target on both paths. The whole sequence is now recognized: it is stripped from the OSC 8 target and kept in the display, and a non-SGR CSI sequence is dropped from both. A custom `fallback` receives the display form, so it too sees the decoration. Undecorated urls are byte-identical to before.
