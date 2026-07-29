@@ -11,7 +11,7 @@
     // aligned trailing comments Biome re-wraps as `"k": "v" /* … */,`, losing
     // the column layout for no gain, and package.json is rewritten by pnpm on
     // every add/remove, so formatting it invites a fight between two tools.
-    "includes": ["src/**/*.ts", "*.ts", "*.json", "!tsconfig.json", "!package.json"]
+    "includes": ["src/**/*.ts", "*.ts", "*.mts", "*.json", "!tsconfig.json", "!package.json"]
   },
   "formatter": {
     "enabled": true,
