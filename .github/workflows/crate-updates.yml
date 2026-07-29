@@ -13,7 +13,7 @@ jobs:
       issues: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Check crate version
         id: crate-check
@@ -55,7 +55,7 @@ jobs:
 
       - name: Create notification issue
         if: steps.crate-check.outputs.has_update == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const crateName = '${{ steps.crate-check.outputs.crate_name }}';
