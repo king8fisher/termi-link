@@ -1,0 +1,183 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Superseded pushes stop burning minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      # Report every failing Node version in one run rather than the first.
+      fail-fast: false
+      matrix:
+        # The floor `engines` declares, through the current active LTS.
+        node: ['18', '20', '22', '24']
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Reads the pnpm version from the `packageManager` field.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm exec tsc --noEmit
+
+      # Biome's result cannot vary by Node, so the other matrix entries would
+      # re-run an identical check. `pnpm lint` reports formatting drift; never
+      # `pnpm format`, which would rewrite the tree and pass.
+      - name: Lint
+        if: matrix.node == '24'
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+  pack:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # `npm`, not `pnpm`, and not `--dry-run`: `prepare` must actually fire and
+      # produce `dist/`.
+      - name: Pack the package
+        id: pack
+        run: |
+          set -euo pipefail
+          npm pack --pack-destination "$RUNNER_TEMP"
+          tarball="$(ls "$RUNNER_TEMP"/termi-link-*.tgz)"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+
+      - name: Assert the tarball carries every entry point
+        run: |
+          set -euo pipefail
+          tarball='${{ steps.pack.outputs.tarball }}'
+          for entry in dist/index.js dist/index.mjs dist/index.d.ts dist/index.d.mts; do
+            if ! tar tzf "$tarball" | grep -qx "package/$entry"; then
+              echo "::error::packed tarball is missing $entry — check the tsup entry points and the package.json files field"
+              exit 1
+            fi
+            echo "tarball carries $entry"
+          done
+
+      # Filenames in an archive prove the bundler ran; they say nothing about
+      # whether the `exports` map resolves to them. The scratch projects below
+      # resolve the package by name, which no in-repo code ever does.
+      - name: Install the tarball into scratch consumer projects
+        run: |
+          set -euo pipefail
+          tarball='${{ steps.pack.outputs.tarball }}'
+          root="$RUNNER_TEMP/consumers"
+          rm -rf "$root"
+          mkdir -p "$root/cjs" "$root/esm"
+
+          cd "$root/cjs"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund "$tarball" typescript
+
+          cd "$root/esm"
+          npm init -y > /dev/null
+          npm pkg set type=module
+          npm install --no-audit --no-fund "$tarball" typescript
+
+          cat > "$root/cjs/check.cjs" <<'EOF'
+          const { terminalLink } = require("termi-link");
+          if (typeof terminalLink !== "function") {
+            console.error("require('termi-link').terminalLink is not a function");
+            process.exit(1);
+          }
+          terminalLink("text", "https://example.com");
+          EOF
+
+          cat > "$root/cjs/check.mjs" <<'EOF'
+          import { terminalLink } from "termi-link";
+          const resolved = import.meta.resolve("termi-link");
+          if (typeof terminalLink !== "function") {
+            console.error("imported terminalLink is not a function");
+            process.exit(1);
+          }
+          // Without a correct `exports` map Node silently serves `main`, and an
+          // import-shaped check alone would pass for the wrong reason.
+          if (!resolved.endsWith("/dist/index.mjs")) {
+            console.error(`import resolved to ${resolved}, expected dist/index.mjs`);
+            process.exit(1);
+          }
+          terminalLink("text", "https://example.com");
+          EOF
+
+          for dir in cjs esm; do
+            cat > "$root/$dir/consumer.ts" <<'EOF'
+          import { terminalLink } from "termi-link";
+          const link: string = terminalLink("text", "https://example.com");
+          export default link;
+          EOF
+          done
+
+      - name: Consume the tarball from CJS at runtime
+        run: node "$RUNNER_TEMP/consumers/cjs/check.cjs"
+
+      - name: Consume the tarball from ESM at runtime
+        run: node "$RUNNER_TEMP/consumers/cjs/check.mjs"
+
+      # A CJS declaration served to an ESM import still type-checks — TypeScript
+      # accepts named imports from it — so asserting that `tsc` exits 0 cannot
+      # see a hoisted `types` condition. The resolution trace can, and naming the
+      # expected declaration per module format is the whole point of the split.
+      - name: Type-check both consumers under nodenext
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/consumers"
+          tsc_flags="--noEmit --module nodenext --moduleResolution nodenext --strict"
+
+          check() {
+            local dir="$1" expected="$2"
+            cd "$root/$dir"
+            if ! ./node_modules/.bin/tsc $tsc_flags consumer.ts; then
+              echo "::error::the $dir consumer does not type-check against the packed tarball"
+              exit 1
+            fi
+            local trace
+            trace="$(./node_modules/.bin/tsc $tsc_flags --traceResolution consumer.ts)"
+            if ! printf '%s\n' "$trace" | grep -qF "Package ID 'termi-link/$expected@"; then
+              echo "::error::the $dir consumer resolved termi-link's types to the wrong declaration — expected $expected"
+              printf '%s\n' "$trace" | grep -F 'was successfully resolved to' || true
+              exit 1
+            fi
+            echo "$dir consumer: types resolve to $expected"
+          }
+
+          check cjs dist/index.d.ts
+          check esm dist/index.d.mts
