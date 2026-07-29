@@ -115,9 +115,19 @@ function supportsHyperlinks(): boolean {
       case "iTerm.app":
         if (v.major > 3 || (v.major === 3 && v.minor >= 1)) return true;
         break;
-      case "WezTerm":
+      case "WezTerm": {
+        // nixpkgs re-versions VCS snapshots as `0-unstable-<date>`, which parses
+        // to major 0 and fails a date-stamped floor. Compare the date instead —
+        // lexicographic ordering is exact for zero-padded ISO dates, which is
+        // why the pattern requires the padding.
+        const nix = /^0-unstable-(\d{4}-\d{2}-\d{2})$/.exec(getEnv("TERM_PROGRAM_VERSION"));
+        if (nix) {
+          if (nix[1] >= "2020-06-20") return true;
+          break;
+        }
         if (v.major >= 20200620) return true;
         break;
+      }
       case "vscode":
         if (v.major > 1 || (v.major === 1 && v.minor >= 72)) return true;
         break;

@@ -442,6 +442,60 @@ describe("TERM_PROGRAM fall-through", () => {
     process.env.TERM = "xterm-kitty";
     expect(isSupported()).toBe(true);
   });
+
+  test("an ordinary upstream WezTerm build above the floor is supported", () => {
+    process.env.TERM_PROGRAM = "WezTerm";
+    process.env.TERM_PROGRAM_VERSION = "20240203-110809-5046fc22";
+    expect(isSupported()).toBe(true);
+  });
+
+  test("the WezTerm floor itself is supported", () => {
+    process.env.TERM_PROGRAM = "WezTerm";
+    process.env.TERM_PROGRAM_VERSION = "20200620-160318-e00b076c";
+    expect(isSupported()).toBe(true);
+  });
+
+  test("a WezTerm one day below the floor is unsupported", () => {
+    process.env.TERM_PROGRAM = "WezTerm";
+    process.env.TERM_PROGRAM_VERSION = "20200619-000000-deadbeef";
+    expect(isSupported()).toBe(false);
+  });
+
+  test("a nixpkgs WezTerm well past the floor is supported", () => {
+    process.env.TERM_PROGRAM = "WezTerm";
+    process.env.TERM_PROGRAM_VERSION = "0-unstable-2024-02-03";
+    expect(isSupported()).toBe(true);
+  });
+
+  test("the WezTerm floor itself in nixpkgs form is supported", () => {
+    process.env.TERM_PROGRAM = "WezTerm";
+    process.env.TERM_PROGRAM_VERSION = "0-unstable-2020-06-20";
+    expect(isSupported()).toBe(true);
+  });
+
+  test("a nixpkgs WezTerm one day below the floor is unsupported", () => {
+    process.env.TERM_PROGRAM = "WezTerm";
+    process.env.TERM_PROGRAM_VERSION = "0-unstable-2020-06-19";
+    expect(isSupported()).toBe(false);
+  });
+
+  test("a WezTerm with no version satisfies no gate", () => {
+    process.env.TERM_PROGRAM = "WezTerm";
+    expect(isSupported()).toBe(false);
+  });
+
+  test("a nixpkgs WezTerm whose gate fails still reaches the TERM check", () => {
+    process.env.TERM_PROGRAM = "WezTerm";
+    process.env.TERM_PROGRAM_VERSION = "0-unstable-2019-01-01";
+    process.env.TERM = "xterm-kitty";
+    expect(isSupported()).toBe(true);
+  });
+
+  test("an unpadded nixpkgs date is not accepted — the comparison is lexicographic", () => {
+    process.env.TERM_PROGRAM = "WezTerm";
+    process.env.TERM_PROGRAM_VERSION = "0-unstable-2024-2-3";
+    expect(isSupported()).toBe(false);
+  });
 });
 
 describe("VTE fall-through", () => {
