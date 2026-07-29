@@ -19,7 +19,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.details.md"
   ],
   "sideEffects": false,
   "repository": {

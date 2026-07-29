@@ -80,8 +80,8 @@ This is an alternative with a different API. The surface differs in three places
 Behavior differs in three ways:
 
 - No runtime dependencies — terminal detection is built in.
-- Urls are made [safe for the escape sequence](https://github.com/king8fisher/termi-link/blob/main/README-details.md#url-safety), so a crafted url cannot break or hijack the link.
-- The [fallback contract](https://github.com/king8fisher/termi-link/blob/main/README-details.md#the-fallback-contract) differs twice — `terminalLink('', url)` returns the url alone, and a custom `fallback` receives the sanitized display value rather than the raw url.
+- Urls are made [safe for the escape sequence](README.details.md#url-safety), so a crafted url cannot break or hijack the link.
+- The [fallback contract](README.details.md#the-fallback-contract) differs twice — `terminalLink('', url)` returns the url alone, and a custom `fallback` receives the sanitized display value rather than the raw url.
 
 ## Reason
 
@@ -94,7 +94,7 @@ updating more often than upstream released, led me to create this alternative.
 > [!NOTE]
 > terminal-link v5.0.0 (2025-09-08) fixed this issue and removed the zero-width spaces entirely.
 
-The exact contracts, the version history and a glossary of the terminal jargon live in [README-details.md](https://github.com/king8fisher/termi-link/blob/main/README-details.md).
+The exact contracts, the version history and a glossary of the terminal jargon live in [README.details.md](README.details.md).
 
 ## License
 
