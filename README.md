@@ -2,9 +2,34 @@
 
 # termi-link
 
-This library provides clickable terminal links for terminals that support them. It is designed to seamlessly replace [terminal-link](https://npmjs.com/package/terminal-link) using an internal terminal-detection mechanism.
+This library provides clickable terminal links for terminals that support them, using an internal terminal-detection mechanism. It is an alternative to [terminal-link](https://npmjs.com/package/terminal-link) with a different API: the entry point and the support check are both shaped differently, so an existing import cannot be switched over unchanged.
 
 ## Differences from terminal-link
+
+The API surface differs in three places:
+
+| | `terminal-link` v5 | `termi-link` |
+| --- | --- | --- |
+| entry | default export, callable | named export `terminalLink` |
+| support check | `terminalLink.isSupported` (boolean **property**) | `isSupported()` (**function**) |
+| stderr | `terminalLink.stderr(...)` | none |
+
+The missing `stderr` helper is deliberate: it takes a stream argument, and
+per-stream capability is downstream of TTY detection, which is an explicit
+non-goal here.
+
+The fallback contract is close to v5's, but two differences remain by design:
+
+- **Empty `text`.** v5's default fallback is `` `${text} ${url}` `` with no
+  special case, so `terminalLink('', url)` yields a leading space. This library
+  returns the url alone.
+- **What a custom `fallback` receives.** v5 passes the url through untouched.
+  This library passes the display value[^target-display] — sanitized, with the
+  SGR[^sgr] decoration kept — which is what makes the default and a hand-written
+  `` (text, url) => `${text} ${url}` `` equivalent, and what keeps a
+  `BEL`[^escbel] out of the callback.
+
+Behaviour differs too:
 
 - **Zero runtime dependencies.** `terminal-link` depends on `ansi-escapes` and
   `supports-hyperlinks`. Terminal detection here is built in.
@@ -93,6 +118,21 @@ value instead: `red(terminalLink(text, url))`.
   ```ts
   isSupported(): boolean
   ```
+
+### `TERMI_LINK_HYPERLINK`
+
+The one runtime control surface. It is checked before every detection branch, so
+it overrides the answer for both `terminalLink` and `isSupported`:
+
+- `1`, `true`, `always`, `enabled` — force links on
+- `0`, `false`, `never`, `disabled` — force links off
+
+Matching is exact and case-sensitive. Any other value — including the empty
+string, and including `TRUE` or `True` — falls through to normal detection, so
+the variable being merely *set* means nothing.
+
+It is intentionally not aliased to `terminal-link`'s `FORCE_HYPERLINK` — this
+library's detection is independent of upstream's, and so is its override.
 
 ## Reason
 

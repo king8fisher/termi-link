@@ -308,9 +308,10 @@ describe("terminal detection by environment", () => {
     expect(isSupported()).toBe(true);
   });
 
-  // The shipped 4.x builds are canaries, and parseVersion yields patch: NaN for
-  // them. A major-only comparison is unaffected; routing this gate through
-  // atLeast would compare NaN and wrongly reject.
+  // The shipped 4.x builds are canaries. parseInt stops at the first non-digit,
+  // so "0-canary" parses to 0, not NaN, and parseVersion yields {4, 0, 0} — the
+  // major-only gate and atLeast agree here. The point is that a canary suffix
+  // does not break the gate, whichever comparison it is routed through.
   test("Hyper 4.0.0-canary.5 is supported", () => {
     process.env.TERM_PROGRAM = "Hyper";
     process.env.TERM_PROGRAM_VERSION = "4.0.0-canary.5";
