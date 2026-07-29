@@ -444,6 +444,66 @@ describe("TERM_PROGRAM fall-through", () => {
   });
 });
 
+describe("VTE fall-through", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    for (const name of DETECTION_ENV_VARS) {
+      delete process.env[name];
+    }
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("a stale VTE_VERSION still reaches the TERM check", () => {
+    process.env.VTE_VERSION = "4000";
+    process.env.TERM = "xterm-kitty";
+    expect(isSupported()).toBe(true);
+  });
+
+  test("a stale VTE_VERSION still reaches the standalone-variable check", () => {
+    process.env.VTE_VERSION = "4000";
+    process.env.WT_SESSION = "1";
+    expect(isSupported()).toBe(true);
+  });
+
+  test("a stale VTE_VERSION still reaches the TERM_PROGRAM switch", () => {
+    process.env.VTE_VERSION = "4000";
+    process.env.TERM_PROGRAM = "iTerm.app";
+    process.env.TERM_PROGRAM_VERSION = "3.5";
+    expect(isSupported()).toBe(true);
+  });
+
+  test("falling through does not turn a failed gate into a pass", () => {
+    process.env.VTE_VERSION = "4000";
+    expect(isSupported()).toBe(false);
+  });
+
+  test("a VTE above the floor still returns early", () => {
+    process.env.VTE_VERSION = "6800";
+    expect(isSupported()).toBe(true);
+  });
+
+  test("VTE 0.50.0 is unsupported — the threshold is strict", () => {
+    process.env.VTE_VERSION = "5000";
+    expect(isSupported()).toBe(false);
+  });
+
+  test("the first version above 0.50.0 is supported", () => {
+    process.env.VTE_VERSION = "5001";
+    expect(isSupported()).toBe(true);
+  });
+
+  test("a failed VTE gate still reaches the standalone-variable check", () => {
+    process.env.VTE_VERSION = "5000";
+    process.env.WT_SESSION = "1";
+    expect(isSupported()).toBe(true);
+  });
+});
+
 // A multiplexer is the program that actually receives the escape sequence, so
 // when one is present it answers for the session and the outer terminal's
 // inherited variables must not. That makes this branch terminal rather than
