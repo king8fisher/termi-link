@@ -768,7 +768,7 @@ describe('url display decoration', () => {
   // Only SGR is display decoration. Every other CSI moves the cursor or clears
   // the screen, so it is dropped whole from both forms rather than printed.
   test.each(['\x1b[?25l', '\x1b[2J', '\x1b[1A', '\x1b[1;40r'])(
-    'the non-SGR sequence %j is dropped from both target and display',
+    'the non-SGR CSI sequence %j is dropped from both target and display',
     (seq) => {
       const { target, display } = osc8(supported('', `${seq}${REPO_URL}`));
       expect(target).toBe(REPO_URL);
@@ -861,5 +861,54 @@ describe('url display decoration', () => {
     const { target, display } = osc8(supported('', blue(url)));
     expect(target).toBe(url);
     expect(display).toBe(blue(url));
+  });
+
+  // Escapes in the url fall into three groups, and only the first two are
+  // recognized as sequences:
+  //   SGR (`\x1b[…m`)     — kept in the display, absent from the target
+  //   other CSI           — dropped whole from both
+  //   everything else     — not matched at all: the ESC is removed by the
+  //                         control-character strip and its printable
+  //                         remainder stays in the url, in both forms
+  // The third group is why the documented contract names CSI specifically.
+  describe('the CSI-only boundary', () => {
+    const nonCsi: [string, string, string][] = [
+      ['OSC, BEL-terminated', '\x1b]0;hi\x07', ']0;hi'],
+      ['OSC, ST-terminated', '\x1b]8;;evil\x1b\\', ']8;;evil\\'],
+      ['DCS', '\x1bPq\x1b\\', 'Pq\\'],
+      ['charset select', '\x1b(B', '(B'],
+      ['full reset', '\x1bc', 'c'],
+      ['SS3', '\x1bOP', 'OP'],
+    ];
+
+    test.each(nonCsi)('%s is not dropped whole — its remainder stays in the target', (_label, prefix, residue) => {
+      const { target } = osc8(supported('', prefix + REPO_URL));
+      expect(target).toBe(residue + REPO_URL);
+    });
+
+    // The invariant that does hold, asserted apart from the residue equality so
+    // a regression names which half broke: no escape byte survives, so the
+    // remainder is inert text rather than an injectable sequence.
+    test.each(nonCsi)('%s leaves no ESC or BEL byte in the target', (_label, prefix) => {
+      const { target } = osc8(supported('', prefix + REPO_URL));
+      expect(target).not.toContain('\x1b');
+      expect(target).not.toContain('\x07');
+    });
+
+    test.each(nonCsi)('%s produces the same remainder in the fallback form', (_label, prefix, residue) => {
+      expect(unsupported('', prefix + REPO_URL)).toBe(residue + REPO_URL);
+    });
+
+    test('by contrast, a non-SGR CSI sequence is dropped whole', () => {
+      const { target, display } = osc8(supported('', `\x1b[2J${REPO_URL}`));
+      expect(target).toBe(REPO_URL);
+      expect(display).toBe(REPO_URL);
+    });
+
+    test('and an SGR sequence is kept in the display but never in the target', () => {
+      const { target, display } = osc8(supported('', blue(REPO_URL)));
+      expect(target).toBe(REPO_URL);
+      expect(display).toBe(blue(REPO_URL));
+    });
   });
 });
