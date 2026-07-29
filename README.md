@@ -11,12 +11,12 @@ This library provides clickable terminal links for terminals that support them. 
 - **URLs are made safe for the escape sequence.** Control characters
   (`U+0000`–`U+001F` and `U+007F`) are stripped, and every remaining byte above
   the 32–126 range the
-  [OSC 8 specification](https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda)
-  permits is percent-encoded. That is the OSC 8 target, and it is control-free on
-  every path. The display value — what the fallback prints, and what a custom
-  `fallback` receives — is control-free too, except for the SGR decoration the
-  library deliberately preserves.
-  `terminal-link` interpolates the URL verbatim, so a `BEL` inside it
+  [OSC 8 specification](https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda)[^osc8]
+  permits is percent-encoded. That is the OSC 8 target[^target-display], and it
+  is control-free on every path. The display value — what the fallback prints,
+  and what a custom `fallback` receives — is control-free too, except for the
+  SGR[^sgr] decoration the library deliberately preserves.
+  `terminal-link` interpolates the URL verbatim, so a `BEL`[^escbel] inside it
   ends the sequence early, an `ESC` can start a new one, and a non-ASCII URL is
   emitted in a form the specification calls undefined.
 
@@ -46,7 +46,7 @@ terminalLink('report', 'file:///Users/me/My Documents/report.pdf', {
 
 ## Styling the url
 
-Both arguments may carry SGR decoration, so `text` and the url can be coloured
+Both arguments may carry SGR[^sgr] decoration, so `text` and the url can be coloured
 independently (`red` and `blue` below are any colour helper — this library
 ships none):
 
@@ -56,8 +56,8 @@ terminalLink(red('termi-link'), blue('https://github.com/king8fisher/termi-link'
 ```
 
 The decoration is kept for display and never reaches the OSC 8 target. A non-SGR
-CSI sequence — cursor movement, screen clears — is dropped whole from both forms
-rather than surviving as literal URI text.
+CSI[^csi] sequence — cursor movement, screen clears — is dropped whole from both
+forms rather than surviving as literal URI text.
 
 Only CSI is recognized. Any other escape form — OSC, DCS, a two-character
 `ESC x` — has its `ESC` removed as a control character, and its printable
@@ -84,7 +84,7 @@ value instead: `red(terminalLink(text, url))`.
   On an unsupported terminal:
   - default — `text url`, space-delimited, or just the URL when `text` is empty
   - `fallback: false` — `text` unchanged, with no URL appended
-  - `fallback: fn` — whatever `fn(text, url)` returns; `url` is passed as the display value, so any SGR decoration is preserved while `BEL` and every non-SGR control character are gone
+  - `fallback: fn` — whatever `fn(text, url)` returns; `url` is passed as the display value[^target-display], so any SGR[^sgr] decoration is preserved while `BEL` and every non-SGR control character are gone
 
   The default keeps the URL delimited by whitespace so the terminal's own URL
   detector picks it up intact. Wrapping it in parens makes detectors that scan
@@ -119,31 +119,65 @@ terminalLink('example.com', 'https://example.com', { fallback: (_text, url) => `
 ## Changelog
 
 - 2.0.0
-  - **Breaking:** `fallback: false` now returns `text` unchanged instead of an empty string, matching `terminal-link`. Pass `fallback: () => ''` to keep the old behavior.
-  - **Breaking:** the default fallback is now `text url` instead of `text (url)`, matching `terminal-link` v5. The parens broke URL detection in terminals that scan for a run of non-whitespace. Pass
-    ```ts
-    fallback: (text, url) => (text ? `${text} (${url})` : url)
-    ```
-    to keep the old format.
-  - **Breaking:** a custom `fallback` function now receives the sanitized url instead of the raw one. Previously control characters survived on this path, so the documented sanitization guarantee did not hold for custom fallbacks. Preserved SGR decoration is the one deliberate exception, since the value is for display.
-  - urls now percent-encode every byte above the 32–126 range that OSC 8 permits, instead of emitting raw non-ASCII. Astral characters encode correctly and a lone surrogate is dropped rather than throwing.
-  - add `strictUrlEncoding`, an opt-in that also percent-encodes the printable ASCII characters RFC 3986 forbids in a URI. Defaults to `false`, so existing output is unchanged. Turn it on if your URLs can contain spaces — a raw space truncates the link in the plain-text fallback.
-  - the `url` argument may now carry SGR decoration, so `text` and the url can be coloured independently. **Breaking:** a decorated url previously emitted its escape sequence as literal URI text — `\x1b[34m` + url reached the terminal as `[34m` + url, a broken link target on both paths. The whole sequence is now recognized: it is stripped from the OSC 8 target and kept in the display, and a non-SGR CSI sequence is dropped from both. A custom `fallback` receives the display form, so it too sees the decoration. Undecorated urls are byte-identical to before.
-  - add detection of Zed terminal
-  - add detection of Foot, mintty, Tabby, Rio and Contour
-  - **Breaking:** Hyper below 4 is no longer reported as supported. It ships xterm.js below 5, which has no OSC 8 support, so the link was emitted and swallowed — the url disappeared entirely. The plain-text fallback now preserves it.
-  - add detection of tmux pass-through. A session inside tmux 3.4 or later — the release where it began relaying OSC 8 — is now reported as supported. **Breaking:** a session inside an older tmux is now reported unsupported instead of inheriting the outer terminal's answer; those variables are stale the moment the session is re-attached elsewhere, and the multiplexer, not the terminal one hop out, is what receives the escape sequence.
-  - a set but unrecognized `TERM_PROGRAM` no longer decides the answer on its own. Detection now falls through to the `TERM`, `COLORTERM`, `TERMINAL_EMULATOR` and standalone-variable checks, so a terminal that sets both is no longer reported unsupported. `terminology` 2.0 and later is also recognized now — its version gate rejected every release past 1.x.
+  - **Fallback contract** — now matches `terminal-link` v5
+    - **Breaking:** `fallback: false` returns `text` unchanged, not an empty string
+      - pass `fallback: () => ''` to keep the old behavior
+    - **Breaking:** the default fallback is `text url`, not `text (url)`
+      - the parens broke terminals whose URL detector scans for a run of non-whitespace
+      - to keep the old format:
+        ```ts
+        fallback: (text, url) => (text ? `${text} (${url})` : url)
+        ```
+    - **Breaking:** a custom `fallback` receives the sanitized display value, not the raw url
+      - control characters used to survive on this path; preserved SGR[^sgr] decoration is the one deliberate exception
+  - **URL safety**
+    - every byte above the 32–126 range OSC 8 permits is percent-encoded instead of emitted raw
+      - astral characters[^astral] encode correctly; a lone surrogate is dropped rather than throwing
+    - new `strictUrlEncoding` also encodes the printable ASCII characters RFC 3986 forbids
+      - defaults to `false`, so existing output is unchanged
+      - turn it on if your URLs can contain spaces — a raw space truncates the link in the plain-text fallback
+    - **Breaking:** the `url` argument may carry SGR decoration, so `text` and the url can be coloured independently
+      - a decorated url previously reached the terminal as literal URI text — `\x1b[34m` + url arrived as `[34m` + url, a broken target on both paths
+      - the sequence is now stripped from the OSC 8 target and kept in the display; a non-SGR CSI is dropped from both
+      - a custom `fallback` receives the display form, so it sees the decoration too
+      - undecorated urls are byte-identical to before
+  - **Terminal detection**
+    - add Zed
+    - add Foot, mintty, Tabby, Rio and Contour
+    - add tmux pass-through — a session inside tmux 3.4 or later, the release that began relaying OSC 8, is reported as supported
+      - **Breaking:** inside an older tmux the answer is now unsupported instead of inherited from the outer terminal — those variables go stale the moment the session is re-attached elsewhere, and the multiplexer, not the terminal one hop out, receives the escape sequence
+    - **Breaking:** Hyper below 4 is no longer reported as supported
+      - it ships xterm.js below 5, which has no OSC 8, so the link was emitted and swallowed and the url disappeared entirely; the plain-text fallback now preserves it
+    - a set but unrecognized `TERM_PROGRAM` no longer decides the answer on its own
+      - detection falls through to the `TERM`, `COLORTERM`, `TERMINAL_EMULATOR` and standalone-variable checks, so a terminal that sets both is no longer reported unsupported
+      - `terminology` 2.0 and later is recognized now — its version gate rejected every release past 1.x
 
-## Credits  
+## Credits
 
-- [terminal-link](https://npmjs.com/package/terminal-link)
-- [termlink](https://github.com/savioxavier/termlink)
-- [supports-hyperlinks](https://github.com/zkat/supports-hyperlinks)
+Detection and fallback behaviour is tracked against these releases:
+
+- [terminal-link](https://npmjs.com/package/terminal-link) (JavaScript)
+  - 5.0.0
+- [termlink](https://github.com/savioxavier/termlink) (Go)
+  - 1.4.3
+- [supports-hyperlinks](https://github.com/zkat/supports-hyperlinks) (Rust)
   - 3.2.0
-- [tty-link](https://github.com/piotrmurach/tty-link)
+- [tty-link](https://github.com/piotrmurach/tty-link) (Ruby)
+  - 0.2.0
 
 ## License
 
 MIT
+
+[^osc8]: **OSC 8** is the escape sequence that makes terminal text clickable — the terminal equivalent of an HTML `<a href>`. The whole link travels as `ESC ]8;; <url> BEL <text> ESC ]8;; BEL`, so the url sits *inside* the sequence and must not contain any byte that could end it early.
+
+[^target-display]: A link is built from two different strings. The **OSC 8 target** is the url the terminal opens on click — never shown, and stripped of everything that is not part of the address. The **display value** is the text printed instead of a link on a terminal without link support, so colour is kept there on purpose.
+
+[^sgr]: **SGR** ("Select Graphic Rendition") is the escape sequence terminals use for colour and text style — bold, underline, red. It is what colour helpers like `chalk`, `picocolors` or `kleur` wrap a string in. Each one starts with an invisible `ESC` byte and ends with `m`, e.g. `ESC[34m` for blue.
+
+[^csi]: **CSI** ("Control Sequence Introducer") is the wider family SGR belongs to: an `ESC`, then `[`, then a command letter. Colour is one command (`m`); the others move the cursor, clear the screen or scroll. Only colour is display decoration, which is why the rest are dropped instead of kept.
+
+[^escbel]: `ESC` (`U+001B`) and `BEL` (`U+0007`) are invisible control characters. `ESC` begins every escape sequence, and `BEL` ends the url part of an OSC 8 link — so either one inside a url can break the link or let a crafted url inject a sequence of its own.
+
+[^astral]: **Astral characters** are the ones outside the basic range — emoji, and less common scripts — which JavaScript stores as a pair of code units. A **lone surrogate** is half of such a pair with no partner, which cannot be encoded at all.
 
