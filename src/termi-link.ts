@@ -169,7 +169,7 @@ function supportsHyperlinks(): boolean {
   // COLORTERM nor TERMINAL_EMULATOR, so TERMINAL_VERSION_TRIPLE is read here
   // and nowhere else.
   if (envIncludes('TERMINAL_NAME', 'contour')
-      && atLeast(parseVersion(getEnv('TERMINAL_VERSION_TRIPLE')), '0.1.0')) {
+    && atLeast(parseVersion(getEnv('TERMINAL_VERSION_TRIPLE')), '0.1.0')) {
     return true;
   }
 
@@ -260,17 +260,14 @@ export function terminalLink(text: string, url: string, options?: {
   strictUrlEncoding?: boolean,
 } | undefined): string {
   const { fallback = null, strictUrlEncoding = false } = options || {};
-  //const textColor = parseColor(color);
   const { target, display } = splitUrl(url, strictUrlEncoding);
   if (supportsHyperlinks()) {
-    //return `\x1b]8;;${url}\x07${textColor}${text || url}\x1b]8;;\x07`;
     return `\x1b]8;;${target}\x07${text || display}\x1b]8;;\x07`;
   }
   if (fallback == null) {
     if (!text) {
       return display;
     }
-    //return `${textColor}${text} (${url})`;
     // Space-delimited, not wrapped in parens: a linkifier that treats a URL as
     // a run of non-whitespace would otherwise capture the closing paren.
     return `${text} ${display}`;
