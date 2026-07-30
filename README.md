@@ -21,6 +21,22 @@ terminalLink('example.com', 'https://example.com');
 terminalLink('example.com', 'https://example.com', { fallback: (_text, url) => `${url}` });
 ```
 
+Here is what each form produces, with `url` being `https://example.com`. The
+supported-terminal column is imitated with a markdown link, because that is exactly
+what a supporting terminal shows you — a clickable label with the url hidden inside
+the escape sequence:
+
+| Call                                                                           | Supported Terminals Output                 | Unsupported Terminals Output        |
+| ------------------------------------------------------------------------------ | ------------------------------------------ | ----------------------------------- |
+| `terminalLink('example.com', url)`                                             | [example.com](https://example.com)         | `example.com https://example.com`   |
+| `terminalLink('', url)`                                                        | [https://example.com](https://example.com) | `https://example.com`               |
+| `terminalLink('example.com', url, { fallback: false })`                        | [example.com](https://example.com)         | `example.com`                       |
+| `terminalLink('example.com', url, { fallback: (t, u) => t + ' <' + u + '>' })` | [example.com](https://example.com)         | `example.com <https://example.com>` |
+
+Note that the supported-terminal column never changes: `fallback` only decides what
+a terminal *without* link support prints. Give `text` as empty and the url becomes
+the label on both paths.
+
 Both arguments may carry color (`red` and `blue` are any color helper — this library ships none):
 
 ```ts
@@ -43,7 +59,7 @@ terminalLink('report', 'file:///Users/me/My Documents/report.pdf', { strictUrlEn
 
 ## API
 
-`terminalLink` returns a clickable link when the terminal supports one, and the configured fallback when it does not:
+Three exports:
 
 ```ts
 terminalLink(text: string, url: string, options?: {
@@ -52,9 +68,17 @@ terminalLink(text: string, url: string, options?: {
 } | undefined): string
 ```
 
-- default — `text url`, space-delimited so the terminal's own url detector picks it up intact, or the url alone when `text` is empty
-- `fallback: false` — `text` unchanged, with no url appended
-- `fallback: fn` — whatever `fn(text, url)` returns, with `url` sanitized and its color kept
+`terminalLink` returns a clickable link when the terminal supports one, and the configured fallback when it does not.
+
+- `fallback: false` — `text` unchanged, url dropped
+- `fallback: fn` — `fn(text, url)` replaces the whole fallback string; `url` arrives sanitized, with its color kept
+
+The table above shows each form's output. The default leaves the url delimited by
+whitespace so the terminal's own url detector picks it up intact.
+
+```ts
+isSupported(): boolean
+```
 
 `isSupported()` reports whether the current terminal supports links.
 
@@ -71,11 +95,11 @@ Matching is exact and case-sensitive. Anything else, including `TRUE` and the em
 
 This is an alternative with a different API. The surface differs in three places:
 
-| | `terminal-link` v5 | `termi-link` |
-| --- | --- | --- |
-| entry | default export, callable | named export `terminalLink` |
+|               | `terminal-link` v5                                | `termi-link`                   |
+| ------------- | ------------------------------------------------- | ------------------------------ |
+| entry         | default export, callable                          | named export `terminalLink`    |
 | support check | `terminalLink.isSupported` (boolean **property**) | `isSupported()` (**function**) |
-| stderr | `terminalLink.stderr(...)` | none |
+| stderr        | `terminalLink.stderr(...)`                        | none                           |
 
 Behavior differs in three ways:
 
