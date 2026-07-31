@@ -133,6 +133,14 @@ strip any other escape form before you call.
 
 ## Changelog
 
+- 2.0.1
+  - Documentation only. No behavior change; the corrected JSDoc ships in `dist/index.d.ts`
+    - `strictUrlEncoding` rewrites the OSC 8 target too, not only the fallback
+    - it changes spelling, not meaning, and is not a no-op on a `new URL()` url
+    - urls relying on backslash normalization need `new URL().href`, not encoding
+    - stripping applies to `url`; `text` prints as passed, and SGR is kept on purpose
+    - `\` separates path segments only in the path, and only under the special schemes
+
 - 2.0.0
   - **Fallback contract**, now matching `terminal-link` v5
     - **Breaking:** `fallback: false` returns `text` unchanged, not an empty string
