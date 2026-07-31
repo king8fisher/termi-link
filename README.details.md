@@ -2,8 +2,8 @@
 
 This is the long half of the documentation: the exact contracts, the version
 history, and a glossary of the terminal jargon the front page uses. You need
-none of it to call the library. Start at [README.md](README.md), where what
-`termi-link` is, how to install it, and how to use it all live.
+none of it to call the library. Start at [README.md](README.md), which covers
+what `termi-link` is, how to install it and how to use it.
 
 - [The fallback contract](#the-fallback-contract)
 - [URL safety](#url-safety)
@@ -28,30 +28,34 @@ remain by design:
 
 ## URL safety
 
-Control characters (`U+0000`–`U+001F` and `U+007F`) are stripped, and every
-remaining byte above the 32–126 range the
+The
 [OSC 8 specification](https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda)
-permits is percent-encoded. That is the [OSC 8 target](#target-and-display), and
-it is control-free on every path. The display value, meaning what the fallback
-prints and what a custom `fallback` receives, is control-free too, except for
-the [SGR](#sgr) decoration the library deliberately preserves. `terminal-link`
-interpolates the URL verbatim, so a [`BEL`](#esc-and-bel) inside it ends the
-sequence early, an `ESC` can start a new one, and a non-ASCII URL is emitted in a
-form the specification calls undefined.
+permits only bytes 32–126 inside the url. This library therefore strips the
+control characters (`U+0000`–`U+001F` and `U+007F`) and percent-encodes every
+remaining byte above 126. What survives is the
+[OSC 8 target](#target-and-display), and it is control-free on every path.
 
-Encoding *within* ASCII stays with the caller. Once a URL is a single string,
-only the caller knows whether an `&` separates parameters or is literal data
-inside one, so no library can encode that half without corrupting one case or
-the other. Above 126 there is no such ambiguity, since those bytes are always
-data, which is why the split falls where it does. Build URLs with `new URL()` or
-`URLSearchParams` rather than string concatenation and this takes care of
-itself.
+The [display value](#target-and-display) is control-free too, apart from the
+[SGR](#sgr) decoration the library preserves on purpose. That is the value the
+fallback prints and a custom `fallback` receives.
 
-One group sits in between: space and `"`, `<`, `>`, `\`, `^`, `` ` ``, `{`, `|`,
-`}` are forbidden in a URI by RFC 3986, yet still legal to OSC 8, which permits
-all of bytes 32–126. They are left raw by default. Opt in with
-`strictUrlEncoding: true`, which is worth doing if your URLs can contain spaces,
-since a raw space truncates the link in the plain-text fallback:
+`terminal-link` interpolates the url verbatim instead. A [`BEL`](#esc-and-bel)
+inside it therefore ends the sequence early, an `ESC` can start a new one, and a
+non-ASCII url is emitted in a form the specification calls undefined.
+
+Encoding *within* ASCII stays with you. Once a url is a single string, only you
+know whether an `&` separates parameters or is literal data inside one, so no
+library can encode that half without corrupting one case or the other. Above 126
+the ambiguity disappears, because those bytes are always data, and that is where
+this library takes over. Build urls with `new URL()` or `URLSearchParams` rather
+than by concatenation and the question never comes up.
+
+Ten characters sit between those two cases: space, `"`, `<`, `>`, `\`, `^`,
+`` ` ``, `{`, `|` and `}`. RFC 3986 forbids them in a URI, yet OSC 8 accepts
+them, since it permits all of bytes 32–126, so they are left raw by default. Opt
+in with `strictUrlEncoding: true`, which is worth doing if your urls can arrive
+with spaces already in them, since a raw space truncates the link in the
+plain-text fallback:
 
 ```ts
 terminalLink('report', 'file:///Users/me/My Documents/report.pdf');
@@ -70,14 +74,15 @@ a url detector stops at whitespace while OSC 8 does not. On a supported terminal
 the rewrite stays invisible as long as `text` is non-empty, since the url is not
 rendered then; leave `text` empty and the label reads `My%20Documents`.
 
-### What the option is safe to assume
+### What you can rely on
 
-The pass is idempotent, because `%` is never re-encoded, so running it over an
-already-encoded URL leaves that URL alone.
+The pass is idempotent, because `%` is never re-encoded. Run it over a url that
+is already encoded and the url comes back unchanged.
 
-It does not follow that the option is a no-op on a URL built with `new URL()`.
-The WHATWG parser behind `new URL()` uses a different, narrower encode set than
-RFC 3986, so a correctly built URL can still carry these characters raw:
+That still does not make it a no-op on a url you built with `new URL()`. The
+WHATWG parser behind `new URL()` encodes a narrower set of characters than
+RFC 3986 does, so a correctly built url can reach this library with some of them
+still raw:
 
 | component | left raw by `new URL()`      |
 | --------- | ---------------------------- |
@@ -85,43 +90,46 @@ RFC 3986, so a correctly built URL can still carry these characters raw:
 | query     | `\` `^` `` ` `` `{` `\|` `}` |
 | fragment  | `\` `^` `{` `\|` `}`         |
 
-For all of those the option changes spelling without changing structure. None of
-them delimit anything in the URI grammar, so encoding them leaves the component
-split and the path segments as they were: `/a|b` and `/a%7Cb` are each a single
-segment.
+The option respells all of those without restructuring them. None of them delimit
+anything in the URI grammar, so encoding them leaves the components and the path
+segments where they were: `/a|b` and `/a%7Cb` are each a single segment.
 
-Whether those two spellings name the same resource is a separate question, and
-not one this library can answer for you. RFC 3986 guarantees equivalence only
-for percent-encoded *unreserved* characters, and `|` is not one of them, so a
-server is free to treat the two forms as different. Decoding and routing are
-application behavior. If a URL of yours is sensitive to that, encode it yourself
-and leave the option off.
+Whether a server treats those two spellings as the same resource is a different
+question, and not one this library can answer for you. RFC 3986 guarantees
+equivalence only for percent-encoded *unreserved* characters, and `|` is not one
+of them, so a server may legitimately tell them apart. Decoding and routing are
+application behavior. If one of your urls depends on that, settle on the
+spelling the server expects, produce that spelling yourself, and leave
+`strictUrlEncoding` off so nothing rewrites it afterwards.
 
-One case does change meaning, and it is the reason the wording above is about
-representation. A WHATWG parser reads `\` as a path separator under the special
-schemes (`http`, `https`, `ws`, `wss`, `ftp`, `file`), so the path in
-`https://e.com/a\b` is `/a/b`, while encoding it to `https://e.com/a%5Cb` yields
-a single segment named `a\b`. This cannot arise from a URL that went through
-`new URL()`, because the parser has already rewritten that backslash to `/`
-before the string reaches this library. It arises only on a hand-assembled
-string, which is a further reason to build URLs rather than concatenate them.
+One character does change meaning, which is why everything above talks about
+spelling rather than meaning. A WHATWG parser reads `\` as a path separator, but
+only in the path, and only under the special schemes (`http`, `https`, `ws`,
+`wss`, `ftp`, `file`). The path in `https://e.com/a\b` is therefore `/a/b`,
+while encoding it to `https://e.com/a%5Cb` yields a single segment named `a\b`.
+The same backslash in a query, in a fragment, or under any other scheme is an
+ordinary character, so encoding it there only respells it: `?q=a\b` and
+`custom://e.com/a\b` both keep the backslash exactly where you put it. A url that went
+through `new URL()` cannot hit this, because the parser rewrites that backslash
+to `/` before the string ever reaches this library. Only a hand-assembled string
+can, which is one more reason to build your urls rather than concatenate them.
 
 ## The escape contract
 
-Both arguments may carry [SGR](#sgr) decoration, so you can color `text` and the
-url independently.
+You can decorate both arguments with [SGR](#sgr), which is what lets you color
+`text` and the url independently.
 
 The decoration is kept for display and never reaches the OSC 8 target. A non-SGR
 [CSI](#csi) sequence, such as cursor movement or a screen clear, is dropped
 whole from both forms rather than surviving as literal URI text.
 
 Only CSI is recognized. Any other escape form, whether OSC, DCS or a
-two-character `ESC x`, has its `ESC` removed as a control character, and its
-printable remainder stays in the url: `"\x1b]0;title\x07" + url` reaches the
-terminal as `]0;title` + url, in both the link target and the display. No `ESC`
-or `BEL` byte ever reaches the target, so no sequence can be injected into the
-link, but the URL is no longer the one you passed. Decorate a url with SGR only;
-if a url may contain any other escape form, strip it before calling.
+two-character `ESC x`, loses its `ESC` as a control character and keeps its
+printable remainder in the url: `"\x1b]0;title\x07" + url` reaches the terminal
+as `]0;title` + url, in both the link target and the display. No `ESC` or `BEL`
+byte ever reaches the target, so nothing can inject a sequence into the link,
+but the url is no longer the one you passed. Decorate a url with SGR only, and
+strip any other escape form before you call.
 
 ## Changelog
 

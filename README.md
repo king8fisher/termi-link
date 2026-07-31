@@ -4,8 +4,8 @@
 
 Clickable links for terminals that support them, and readable plain text for the ones that do not.
 It is an alternative to [terminal-link](https://npmjs.com/package/terminal-link) with an almost
-matching API and semantics, differing in [a few places](#differences-from-terminal-link), so an
-existing import needs a small edit rather than a rewrite.
+matching API and semantics, differing in [a few places](#differences-from-terminal-link), so you
+can move an existing import over with a small edit rather than a rewrite.
 
 > [!TIP]
 > The exact contracts, the version history and a glossary of the terminal jargon live in [README.details.md](README.details.md).
@@ -43,8 +43,8 @@ shows you: a clickable label with the url hidden inside the escape sequence.
 
 ### Text formatting
 
-Both arguments can carry text formatting such as color. `red` and `blue` below stand for any
-color helper; this library ships none.
+You can pass text formatting, such as color, to either argument. `red` and `blue` below stand for
+whichever color helper you use; this library ships none.
 
 ```ts
 terminalLink(red('termi-link'), blue('https://github.com/king8fisher/termi-link'));
@@ -60,17 +60,24 @@ red(terminalLink(text, url));
 
 ### Url encoding
 
-Encoding a url is the caller's job. Once a url is one string, only you know whether an `&`
-separates two query parameters or is literal data inside one of them, so build your urls with
-`new URL()` and `URLSearchParams` rather than by concatenation, then pass the finished string in.
+Encoding your urls is up to you. Once a url is a single string, only you know whether an `&`
+separates two query parameters or is part of the data inside one, so build your urls with
+`new URL()` and `URLSearchParams` instead of gluing strings together, then hand the finished
+result to `terminalLink`.
 
-The library handles what OSC 8 requires on its own. Control characters are removed and every byte
-above 126 is percent-encoded, on both the link and the fallback.
+The library takes care of the rest. It removes anything from your url that could break or hijack
+the link, and encodes the characters the escape sequence cannot carry, both in the link itself and
+in the text it prints. Color is the deliberate exception: the formatting you wrapped the
+url in survives into whatever gets printed, which is what makes the colored example above show
+blue. Your `text` is a different matter, printed exactly as you give it, so clean it yourself if
+it can carry anything you did not put there.
 
-`strictUrlEncoding` covers a group in between: the printable characters RFC 3986 forbids in a URI,
-a space among them. It is off by default. Turn it on when urls can reach you already unescaped,
-from the filesystem or a config file, because a raw space truncates the link in the plain-text
-fallback:
+Ten characters fall between those two cases: space, `"`, `<`, `>`, `\`, `^`, `` ` ``, `{`, `|` and
+`}`. A url is not supposed to contain any of them, but the escape sequence accepts them, so the
+library passes them through as you wrote them. `strictUrlEncoding` encodes them for you, and it
+stays off unless you ask for it. Turn it on when a url can reach you already unescaped, say from
+the filesystem or a config file. A space is the one that does visible damage, cutting your link
+short in the plain-text fallback:
 
 ```ts
 terminalLink('report', 'file:///Users/me/My Documents/report.pdf');
@@ -80,9 +87,10 @@ terminalLink('report', 'file:///Users/me/My Documents/report.pdf', { strictUrlEn
 // fallback linkifies       file:///Users/me/My%20Documents/report.pdf
 ```
 
-On a url you built properly the option is usually harmless, but it is not always a no-op. See
-[url safety](README.details.md#url-safety) for the full character set, the cases where it rewrites
-something `new URL()` had left alone, and the one case where that matters.
+One thing to know before you turn it on: inside the path of an `https` or `file` style url, a
+backslash works as a path separator, so encoding it changes where the link points. In a query or
+a fragment it is just a character. Read [url safety](README.details.md#url-safety) if that could
+affect your urls.
 
 ## API
 
@@ -113,8 +121,8 @@ isSupported(): boolean
 
 ### `TERMI_LINK_HYPERLINK`
 
-This environment variable is the one runtime control. It is checked before every detection
-branch, so it overrides both `terminalLink` and `isSupported`:
+This environment variable lets you force links on or off at runtime. It is checked before every
+detection branch, so it overrides both `terminalLink` and `isSupported`:
 
 - `1`, `true`, `always`, `enabled` force links on
 - `0`, `false`, `never`, `disabled` force links off
