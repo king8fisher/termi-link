@@ -3,8 +3,12 @@
 # termi-link
 
 Clickable links for terminals that support them, and readable plain text for the ones that do not.
-It is an alternative to [terminal-link](https://npmjs.com/package/terminal-link) with a different
-API, so you cannot switch an existing import over unchanged.
+It is an alternative to [terminal-link](https://npmjs.com/package/terminal-link) with an almost
+matching API and semantics, differing in [a few places](#differences-from-terminal-link), so an
+existing import needs a small edit rather than a rewrite.
+
+> [!TIP]
+> The exact contracts, the version history and a glossary of the terminal jargon live in [README.details.md](README.details.md).
 
 ## Installation
 
@@ -21,41 +25,64 @@ terminalLink('example.com', 'https://example.com');
 terminalLink('example.com', 'https://example.com', { fallback: (_text, url) => `${url}` });
 ```
 
-Here is what each form produces, with `url` being `https://example.com`. The
-supported-terminal column is imitated with a markdown link, because that is exactly
-what a supporting terminal shows you — a clickable label with the url hidden inside
-the escape sequence:
+Here is what each call renders, where `url` is `https://example.com`. The supported-terminal
+column is imitated with a markdown link, because that is exactly what a supporting terminal
+shows you: a clickable label with the url hidden inside the escape sequence.
 
-| Call                                                                           | Supported Terminals Output                 | Unsupported Terminals Output        |
+| Call                                                                           | Supported terminals                        | Unsupported terminals               |
 | ------------------------------------------------------------------------------ | ------------------------------------------ | ----------------------------------- |
 | `terminalLink('example.com', url)`                                             | [example.com](https://example.com)         | `example.com https://example.com`   |
 | `terminalLink('', url)`                                                        | [https://example.com](https://example.com) | `https://example.com`               |
 | `terminalLink('example.com', url, { fallback: false })`                        | [example.com](https://example.com)         | `example.com`                       |
 | `terminalLink('example.com', url, { fallback: (t, u) => t + ' <' + u + '>' })` | [example.com](https://example.com)         | `example.com <https://example.com>` |
 
-Note that the supported-terminal column never changes: `fallback` only decides what
-a terminal *without* link support prints. Give `text` as empty and the url becomes
-the label on both paths.
+> [!NOTE]
+> The supported-terminal column never changes. `fallback` only decides what a terminal
+> *without* link support prints. Leave `text` empty and the url becomes the label on
+> both paths.
 
-Both arguments may carry color (`red` and `blue` are any color helper — this library ships none):
+### Text formatting
+
+Both arguments can carry text formatting such as color. `red` and `blue` below stand for any
+color helper; this library ships none.
 
 ```ts
 terminalLink(red('termi-link'), blue('https://github.com/king8fisher/termi-link'));
-// fallback: red text, blue url — and the link target itself stays byte-clean
+// fallback: red text, blue url, and the link target itself stays byte-clean
 ```
 
-A supported terminal renders the text, not the url, so url color shows only in the
-fallback. Wrap the whole return value — `red(terminalLink(text, url))` — to color a
-link on both paths.
-
-Turn on `strictUrlEncoding` if your urls can contain spaces — a raw space truncates
-the link in the plain-text fallback:
+A supported terminal renders the text, not the url, so the url color shows up only in the
+fallback. To give both parts the same color, wrap the whole return value:
 
 ```ts
-// without the option the fallback linkifies only  file:///Users/me/My
-terminalLink('report', 'file:///Users/me/My Documents/report.pdf', { strictUrlEncoding: true });
-// with it, the whole path survives  file:///Users/me/My%20Documents/report.pdf
+red(terminalLink(text, url));
 ```
+
+### Url encoding
+
+Encoding a url is the caller's job. Once a url is one string, only you know whether an `&`
+separates two query parameters or is literal data inside one of them, so build your urls with
+`new URL()` and `URLSearchParams` rather than by concatenation, then pass the finished string in.
+
+The library handles what OSC 8 requires on its own. Control characters are removed and every byte
+above 126 is percent-encoded, on both the link and the fallback.
+
+`strictUrlEncoding` covers a group in between: the printable characters RFC 3986 forbids in a URI,
+a space among them. It is off by default. Turn it on when urls can reach you already unescaped,
+from the filesystem or a config file, because a raw space truncates the link in the plain-text
+fallback:
+
+```ts
+terminalLink('report', 'file:///Users/me/My Documents/report.pdf');
+// fallback linkifies only  file:///Users/me/My
+
+terminalLink('report', 'file:///Users/me/My Documents/report.pdf', { strictUrlEncoding: true });
+// fallback linkifies       file:///Users/me/My%20Documents/report.pdf
+```
+
+On a url you built properly the option is usually harmless, but it is not always a no-op. See
+[url safety](README.details.md#url-safety) for the full character set, the cases where it rewrites
+something `new URL()` had left alone, and the one case where that matters.
 
 ## API
 
@@ -68,13 +95,15 @@ terminalLink(text: string, url: string, options?: {
 } | undefined): string
 ```
 
-`terminalLink` returns a clickable link when the terminal supports one, and the configured fallback when it does not.
+`terminalLink` returns a clickable link when the terminal supports one, and the configured
+fallback when it does not.
 
-- `fallback: false` — `text` unchanged, url dropped
-- `fallback: fn` — `fn(text, url)` replaces the whole fallback string; `url` arrives sanitized, with its color kept
+- `fallback: false` keeps `text` unchanged and drops the url
+- `fallback: fn` replaces the whole fallback string with `fn(text, url)`, where `url` arrives
+  sanitized and keeps its color
 
-The table above shows each form's output. The default leaves the url delimited by
-whitespace so the terminal's own url detector picks it up intact.
+The table above shows what each form outputs. By default the url is left delimited by
+whitespace, so the terminal's own url detector picks it up intact.
 
 ```ts
 isSupported(): boolean
@@ -84,18 +113,20 @@ isSupported(): boolean
 
 ### `TERMI_LINK_HYPERLINK`
 
-The one runtime control surface. This environment variable is checked before every detection branch, so it overrides both `terminalLink` and `isSupported`:
+This environment variable is the one runtime control. It is checked before every detection
+branch, so it overrides both `terminalLink` and `isSupported`:
 
-- `1`, `true`, `always`, `enabled` — force links on
-- `0`, `false`, `never`, `disabled` — force links off
+- `1`, `true`, `always`, `enabled` force links on
+- `0`, `false`, `never`, `disabled` force links off
 
-Matching is exact and case-sensitive. Anything else, including `TRUE` and the empty string, falls through to normal detection.
+Matching is exact and case-sensitive. Anything else, including `TRUE` and the empty string,
+falls through to normal detection.
 
 ## Differences from terminal-link
 
 This is an alternative with a different API. The surface differs in three places:
 
-|               | `terminal-link` v5                                | `termi-link`                   |
+|               | `terminal-link` v5                                | `termi-link` (this library)    |
 | ------------- | ------------------------------------------------- | ------------------------------ |
 | entry         | default export, callable                          | named export `terminalLink`    |
 | support check | `terminalLink.isSupported` (boolean **property**) | `isSupported()` (**function**) |
@@ -103,9 +134,12 @@ This is an alternative with a different API. The surface differs in three places
 
 Behavior differs in three ways:
 
-- No runtime dependencies — terminal detection is built in.
-- Urls are made [safe for the escape sequence](README.details.md#url-safety), so a crafted url cannot break or hijack the link.
-- The [fallback contract](README.details.md#the-fallback-contract) differs twice — `terminalLink('', url)` returns the url alone, and a custom `fallback` receives the sanitized display value rather than the raw url.
+- No runtime dependencies, because terminal detection is built in.
+- Urls are made [safe for the escape sequence](README.details.md#url-safety), so a crafted url
+  cannot break or hijack the link.
+- The [fallback contract](README.details.md#the-fallback-contract) differs twice:
+  `terminalLink('', url)` returns the url alone, and a custom `fallback` receives the sanitized
+  display value rather than the raw url.
 
 ## Reason
 
@@ -117,8 +151,6 @@ updating more often than upstream released, led me to create this alternative.
 
 > [!NOTE]
 > terminal-link v5.0.0 (2025-09-08) fixed this issue and removed the zero-width spaces entirely.
-
-The exact contracts, the version history and a glossary of the terminal jargon live in [README.details.md](README.details.md).
 
 ## License
 

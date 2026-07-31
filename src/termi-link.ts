@@ -200,10 +200,18 @@ function supportsHyperlinks(): boolean {
 
 export const ANSI_RESET = "\u001b[0m";
 
-// Printable ASCII that RFC 3986 does not permit in a URI. These are never
-// delimiters and never meaningful raw, so encoding them is unambiguous — but a
-// raw space is still legal to OSC 8, which permits all of bytes 32-126, so the
+// Printable ASCII that RFC 3986 does not permit in a URI. None of them delimit
+// anything in the RFC's grammar, so encoding them yields the form it asks for —
+// but they are still legal to OSC 8, which permits all of bytes 32-126, so the
 // encoding is opt-in rather than automatic.
+//
+// Not a no-op for every parser, which is the other half of why it is opt-in:
+// WHATWG reads `\` as a path separator under the special schemes, so
+// `https://e.com/a\b` is the path `/a/b` raw and the single segment `/a%5Cb`
+// encoded. The rest of the set only ever changes spelling, since none of them
+// delimit anything in the URI grammar, but spelling is not nothing: `|` and
+// `%7C` are not equivalent under RFC 3986, which normalizes percent-encoding
+// for unreserved characters only, so a server may still tell them apart.
 const INVALID_URI_CHARS = /[ "<>\\^`{|}]/g;
 
 // A CSI sequence: ESC [, parameter bytes, intermediate bytes, one final byte.
@@ -268,14 +276,14 @@ function splitUrl(url: string, strict = false): { target: string; display: strin
 }
 
 /**
- * Creates a clickable terminal link sequence of characters. The url provided will be sanitized into two values: the OSC 8 target, from which control characters are removed and bytes above the 32-126 range OSC 8 permits are percent-encoded; and the display value, which is control-free except for the SGR sequences the library preserves. Encoding within ASCII stays with the caller.
+ * Creates a clickable terminal link sequence of characters. The url provided will be sanitized into two values: the OSC 8 target, from which control characters are removed and bytes above the 32-126 range OSC 8 permits are percent-encoded; and the display value, which is control-free except for the SGR sequences the library preserves. Encoding within ASCII stays with the caller, and has to: only the caller knows whether an `&` separates two query parameters or is literal data inside one of them, so a library that guessed would corrupt every url it guessed wrong about. Assemble urls with `new URL()` and `URLSearchParams`, or run each portion through `encodeURIComponent` before joining them, rather than concatenating strings.
  *
  * @param text The text to display, if an empty string `""` is passed, the text will be the same as the url, and in the fallback case, the link will be the only thing displayed.
- * @param url The URL to link to. It may carry SGR decoration — `terminalLink(red(text), blue(url))` is valid — which is kept for display and never reaches the link target. A non-SGR CSI sequence is dropped whole from both forms. Only CSI is recognized: any other escape form (OSC, DCS, a two-character `ESC x`) has its `ESC` removed as a control character, and its printable remainder stays in the url. No `ESC` or `BEL` byte ever reaches the target, so no sequence can be injected into the link — but the target is not guaranteed byte-identical to a url carrying a non-CSI escape. On a supported terminal the url is not rendered when `text` is non-empty, so its decoration has no visible effect there.
+ * @param url The URL to link to. It may carry SGR decoration, as in `terminalLink(red(text), blue(url))`, which is kept for display and never reaches the link target. A non-SGR CSI sequence is dropped whole from both forms. Only CSI is recognized: any other escape form (OSC, DCS, a two-character `ESC x`) has its `ESC` removed as a control character, and its printable remainder stays in the url. No `ESC` or `BEL` byte ever reaches the target, so no sequence can be injected into the link, but the target is not guaranteed byte-identical to a url carrying a non-CSI escape. On a supported terminal the url is not rendered when `text` is non-empty, so its decoration has no visible effect there.
  * @param options Optional parameters
  * @param options.fallback Override the default fallback or disable it. When a function is provided, it receives the `text` and the display value of the `url` as parameters and is expected to return a string. Because it is the display value, any SGR decoration on the url reaches the callback, while `BEL` and every non-SGR control character are already gone. That is safe: what the callback returns is printed as text and never becomes an OSC 8 URI.
- * If set to `false`, the `text` is returned unchanged on an unsupported terminal — the URL is simply not appended. This matches `terminal-link`.
- * @param options.strictUrlEncoding Also percent-encode the printable ASCII characters RFC 3986 forbids in a URI: space, double quote, angle brackets, backslash, caret, backtick, braces and pipe. Defaults to `false`, which leaves them raw. A raw space is legal to OSC 8 but truncates the link in the plain-text fallback, because URL detectors stop at whitespace.
+ * If set to `false`, the `text` is returned unchanged on an unsupported terminal, with the URL simply not appended. This matches `terminal-link`.
+ * @param options.strictUrlEncoding Also percent-encode the printable ASCII characters RFC 3986 forbids in a URI: space, double quote, angle brackets, backslash, caret, backtick, braces and pipe. Encoding them produces the form RFC 3986 asks for, while OSC 8 permits them raw, which is why this is opt-in and defaults to `false`. One caveat: a WHATWG url parser reads `\` as a path separator under the special schemes, so `https://e.com/a\b` resolves to the path `/a/b` raw but to a single segment `/a%5Cb` once encoded. Encoding it here would pin the backslash as a literal, so a url relying on that normalization should be run through `new URL()` and passed as its `.href`, which rewrites the backslash to `/` before this library sees it. The pass runs before the target and the display are split, so it applies on both paths rather than only the fallback. It is idempotent, since `%` is never re-encoded, but it is not a no-op on a url built with `new URL()`: the WHATWG encode set is narrower than RFC 3986 and leaves `|` raw in paths, along with `\`, `^`, `` ` ``, `{`, `|` and `}` in query and fragment. For those the option changes spelling without changing structure, since none of them delimit anything in the URI grammar. Whether a server treats `/a|b` and `/a%7Cb` as the same resource is application behavior, not something this library can promise: RFC 3986 guarantees equivalence only for percent-encoded unreserved characters, and `|` is not one. The truncation it prevents belongs to the fallback alone: a raw space is legal to OSC 8 and unambiguous inside the terminator-delimited sequence, but in plain text a URL detector stops at whitespace. Treat it as a safety net for urls you did not assemble yourself, not as a substitute for encoding them properly.
  * @returns Formatted terminal link string
  */
 export function terminalLink(
