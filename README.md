@@ -130,6 +130,47 @@ detection branch, so it overrides both `terminalLink` and `isSupported`:
 Matching is exact and case-sensitive. Anything else, including `TRUE` and the empty string,
 falls through to normal detection.
 
+## Supported terminals
+
+Detection is built into the library. It reads only the environment variables a terminal sets
+about itself — `TERM_PROGRAM`, `TERM_PROGRAM_VERSION`, `TERM`, `COLORTERM`, `VTE_VERSION`,
+`TERMINAL_EMULATOR`, `TERMINAL_NAME`, `TERMINAL_VERSION_TRIPLE`, `TMUX`, `DOMTERM`,
+`WT_SESSION` and `KONSOLE_VERSION` — with no runtime dependency, no network call and no
+round-trip to the terminal itself.
+
+A version below means the oldest release that gets links; `—` means the terminal is recognized
+by presence, with no version gate.
+
+| Terminal            | Version  |
+| ------------------- | -------- |
+| Alacritty           | —        |
+| Contour             | 0.1.0    |
+| DomTerm             | —        |
+| Foot                | —        |
+| Ghostty             | 1.0      |
+| Hyper               | 4.0      |
+| iTerm2              | 3.1      |
+| JetBrains IDEs      | —        |
+| kitty               | —        |
+| Konsole             | —        |
+| mintty              | 2.9.7    |
+| Rio                 | 0.0.28   |
+| Tabby               | —        |
+| Terminology         | 1.2      |
+| tmux                | 3.4      |
+| VS Code             | 1.72     |
+| VTE-based terminals | 0.50.1   |
+| WezTerm             | 20200620 |
+| Windows Terminal    | —        |
+| Xfce Terminal       | —        |
+| Zed                 | —        |
+
+VTE-based terminals covers GNOME Terminal, Tilix and Guake among others. The floor starts one
+release above 0.50.0, which shipped link support and crashed on it.
+
+tmux is the multiplexer's own version, not the terminal's. Inside a pane, tmux is what receives
+the escape sequence, so it answers for the session rather than the terminal running outside it.
+
 ## Differences from terminal-link
 
 This is an alternative with a different API. The surface differs in three places:
@@ -142,7 +183,7 @@ This is an alternative with a different API. The surface differs in three places
 
 Behavior differs in three ways:
 
-- No runtime dependencies, because terminal detection is built in.
+- No runtime dependencies, because [terminal detection](#supported-terminals) is built in.
 - Urls are made [safe for the escape sequence](README.details.md#url-safety), so a crafted url
   cannot break or hijack the link.
 - The [fallback contract](README.details.md#the-fallback-contract) differs twice:

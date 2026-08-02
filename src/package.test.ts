@@ -90,6 +90,10 @@ describe("package manifest", () => {
     expect(manifest.sideEffects).toBe(false);
   });
 
+  test("no runtime dependencies, as the supported-terminal section claims", () => {
+    expect(Object.keys((manifest.dependencies as Record<string, unknown>) ?? {})).toEqual([]);
+  });
+
   test("the repository url is a fully-qualified git url", () => {
     expect(record(manifest.repository).url).toMatch(/^git\+/);
   });
