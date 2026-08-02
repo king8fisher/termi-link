@@ -132,54 +132,20 @@ falls through to normal detection.
 
 ## Supported terminals
 
-Detection is built into the library. It reads only the environment variables a terminal sets
-about itself — `TERM_PROGRAM`, `TERM_PROGRAM_VERSION`, `TERM`, `COLORTERM`, `VTE_VERSION`,
-`TERMINAL_EMULATOR`, `TERMINAL_NAME`, `TERMINAL_VERSION_TRIPLE`, `TMUX`, `DOMTERM`,
-`WT_SESSION` and `KONSOLE_VERSION` — with no runtime dependency, no network call and no
-round-trip to the terminal itself.
-
-A version below means the oldest release that gets links; `—` means the terminal is recognized
-by presence, with no version gate.
-
-| Terminal            | Version  |
-| ------------------- | -------- |
-| Alacritty           | —        |
-| Contour             | 0.1.0    |
-| DomTerm             | —        |
-| Foot                | —        |
-| Ghostty             | 1.0      |
-| Hyper               | 4.0      |
-| iTerm2              | 3.1      |
-| JetBrains IDEs      | —        |
-| kitty               | —        |
-| Konsole             | —        |
-| mintty              | 2.9.7    |
-| Rio                 | 0.0.28   |
-| Tabby               | —        |
-| Terminology         | 1.2      |
-| tmux                | 3.4      |
-| VS Code             | 1.72     |
-| VTE-based terminals | 0.50.1   |
-| WezTerm             | 20200620 |
-| Windows Terminal    | —        |
-| Xfce Terminal       | —        |
-| Zed                 | —        |
-
-VTE-based terminals covers GNOME Terminal, Tilix and Guake among others. The floor starts one
-release above 0.50.0, which shipped link support and crashed on it.
-
-tmux is the multiplexer's own version, not the terminal's. Inside a pane, tmux is what receives
-the escape sequence, so it answers for the session rather than the terminal running outside it.
+Detection is built in. The library reads only the environment variables a terminal sets about
+itself, with no runtime dependency, no network call and no round-trip to the terminal. Every
+terminal it recognizes, the release each is supported from and the variables each is read
+from are listed in [README.details.md](README.details.md#supported-terminals).
 
 ## Differences from terminal-link
 
 This is an alternative with a different API. The surface differs in three places:
 
-|               | `terminal-link` v5                                | `termi-link` (this library)    |
-| ------------- | ------------------------------------------------- | ------------------------------ |
-| entry         | default export, callable                          | named export `terminalLink`    |
-| support check | `terminalLink.isSupported` (boolean **property**) | `isSupported()` (**function**) |
-| stderr        | `terminalLink.stderr(...)`                        | none                           |
+|               | [terminal-link](https://npmjs.com/package/terminal-link) v5 | `termi-link` (this library)    |
+| ------------- | ----------------------------------------------------------- | ------------------------------ |
+| entry         | default export, callable                                    | named export `terminalLink`    |
+| support check | `terminalLink.isSupported` (boolean **property**)           | `isSupported()` (**function**) |
+| stderr        | `terminalLink.stderr(...)`                                  | none                           |
 
 Behavior differs in three ways:
 
@@ -192,11 +158,12 @@ Behavior differs in three ways:
 
 ## Reason
 
-The `terminal-link` library, long the go-to for outputting links, added zero-width spaces around
-urls, which made links lead to `404` in Windows terminals.
-[Issue #18](https://github.com/sindresorhus/terminal-link/issues/18) was opened in February 2022
-and stayed open for more than three years. That, plus a supported-terminal list that needed
-updating more often than upstream released, led me to create this alternative.
+The [terminal-link](https://npmjs.com/package/terminal-link) library, long the go-to for
+outputting links, added zero-width spaces around urls, which made links lead to `404` in
+Windows terminals. [Issue #18](https://github.com/sindresorhus/terminal-link/issues/18) was
+opened in February 2022 and stayed open for more than three years. That, plus a
+supported-terminal list that needed updating more often than upstream released, led me to
+create this alternative.
 
 > [!NOTE]
 > terminal-link v5.0.0 (2025-09-08) fixed this issue and removed the zero-width spaces entirely.

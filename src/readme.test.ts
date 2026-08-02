@@ -4,7 +4,10 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { isSupported } from "./termi-link";
 import { TERMINALS, type Terminal } from "./terminals";
 
-const readme = readFileSync(path.resolve(__dirname, "../README.md"), "utf8");
+// The table lives in the long half of the documentation; the front page carries
+// only a pointer to it, so there is one copy to keep in step with production.
+const SOURCE = "README.details.md";
+const readme = readFileSync(path.resolve(__dirname, "..", SOURCE), "utf8");
 
 type Env = Record<string, string>;
 
@@ -12,6 +15,22 @@ interface Row {
   terminal: string;
   /** The version cell, or `null` for an ungated (`—`) terminal. */
   floor: string | null;
+  /** The variable names the `Environment` cell spells, in the order it spells them. */
+  variables: string[];
+}
+
+/**
+ * The environment variables an `Environment` cell names. A backticked span is a
+ * variable when it is `NAME` or `NAME=value`; the sample values the cell also
+ * backticks (`contour`, `alacritty-direct`) are lower-case and do not match.
+ */
+function parseVariables(cell: string): string[] {
+  const names = new Set<string>();
+  for (const [, span] of cell.matchAll(/`([^`]+)`/g)) {
+    const name = /^([A-Z][A-Z0-9_]*)(=|$)/.exec(span);
+    if (name) names.add(name[1]);
+  }
+  return [...names];
 }
 
 interface Fixture {
@@ -27,11 +46,11 @@ interface Fixture {
   below?: string;
 }
 
-/** The `## Supported terminals` table, as the README currently spells it. */
+/** The `## Supported terminals` table, as the document currently spells it. */
 function parseSupportedTerminals(markdown: string): Row[] {
   const section = markdown.split(/^## /m).find((part) => part.startsWith("Supported terminals"));
   if (section === undefined) {
-    throw new Error("README.md has no `## Supported terminals` section");
+    throw new Error(`${SOURCE} has no \`## Supported terminals\` section`);
   }
   const rows: Row[] = [];
   for (const line of section.split("\n")) {
@@ -41,10 +60,14 @@ function parseSupportedTerminals(markdown: string): Row[] {
       .split("|")
       .slice(1, -1)
       .map((cell) => cell.trim());
-    if (cells.length !== 2) continue;
+    if (cells.length !== 4) continue;
     if (cells[0] === "Terminal") continue;
     if (/^:?-{3,}:?$/.test(cells[0])) continue;
-    rows.push({ terminal: cells[0], floor: cells[1] === "—" ? null : cells[1] });
+    rows.push({
+      terminal: cells[0],
+      floor: cells[1] === "—" ? null : cells[1],
+      variables: parseVariables(cells[2]),
+    });
   }
   return rows;
 }
@@ -120,23 +143,15 @@ const FIXTURES: Record<string, Fixture> = {
   Zed: { env: { TERM_PROGRAM: "zed" } },
 };
 
-// Every variable supportsHyperlinks() inspects. Re-declared rather than imported
-// from src/termi-link.test.ts, which exports nothing: a row must not inherit the
-// terminal the suite happens to be running in and pass for the wrong reason.
+// Every variable supportsHyperlinks() inspects: the union of what each terminal
+// declares, plus the force variable, which belongs to no terminal. Derived
+// rather than hand-listed so a terminal added with a new variable cannot leave
+// this suite running in an environment it never cleared — a row must not
+// inherit the terminal the suite happens to be running in and pass for the
+// wrong reason.
 const DETECTION_ENV_VARS = [
   "TERMI_LINK_HYPERLINK",
-  "TERM_PROGRAM",
-  "TERM_PROGRAM_VERSION",
-  "TERM",
-  "COLORTERM",
-  "VTE_VERSION",
-  "DOMTERM",
-  "WT_SESSION",
-  "KONSOLE_VERSION",
-  "TERMINAL_EMULATOR",
-  "TERMINAL_NAME",
-  "TERMINAL_VERSION_TRIPLE",
-  "TMUX",
+  ...new Set(TERMINALS.flatMap((terminal) => terminal.variables)),
 ];
 
 function clearDetectionEnv(): void {
@@ -145,9 +160,41 @@ function clearDetectionEnv(): void {
   }
 }
 
+/**
+ * Every `process.env` key `run` touches, recorded by standing a proxy in for the
+ * environment. Reading is the only thing detection does with `process.env`, so
+ * this is the whole of what an entry consults.
+ */
+function recordEnvReads(env: Env, run: () => void): Set<string> {
+  const seen = new Set<string>();
+  const saved = process.env;
+  process.env = new Proxy(
+    { ...env },
+    {
+      get(target, key) {
+        if (typeof key === "string") seen.add(key);
+        return target[key as keyof typeof target];
+      },
+      has(target, key) {
+        if (typeof key === "string") seen.add(key);
+        return key in target;
+      },
+    },
+  );
+  try {
+    run();
+  } finally {
+    process.env = saved;
+  }
+  return seen;
+}
+
+function fixtureEnv(fixture: Fixture, version: string | null): Env {
+  return typeof fixture.env === "function" ? fixture.env(version ?? "") : fixture.env;
+}
+
 function applyFixture(fixture: Fixture, version: string | null): void {
-  const env = typeof fixture.env === "function" ? fixture.env(version ?? "") : fixture.env;
-  for (const [name, value] of Object.entries(env)) {
+  for (const [name, value] of Object.entries(fixtureEnv(fixture, version))) {
     process.env[name] = value;
   }
 }
@@ -191,6 +238,12 @@ describe("supported-terminal table", () => {
     expect(row, `${terminal.name} has no row in the README table`).toBeDefined();
     expect(row?.floor).toBe(terminal.floor);
   });
+
+  test.each(TERMINALS)("the documented environment for $name is what it reads", (terminal) => {
+    const row = rows.find((candidate) => candidate.terminal === terminal.name);
+    expect(row, `${terminal.name} has no row in the README table`).toBeDefined();
+    expect([...(row?.variables ?? [])].sort()).toEqual([...terminal.variables].sort());
+  });
 });
 
 describe("the documented floors match detection", () => {
@@ -214,15 +267,33 @@ describe("the documented floors match detection", () => {
     expect(isSupported()).toBe(false);
   });
 
-  // The clearing list is hand-written while the terminal set is not, so a
-  // terminal keyed off a variable the list omits would survive clearing and
-  // answer for every other case in this suite. Checking each fixture against
-  // the list is what ties the two together.
-  test.each(withFixture)("clearing neutralizes $name", (terminal) => {
+  // Clearing only what this terminal declares, rather than the whole union, is
+  // what makes `variables` a claim about this entry: a variable its fixture sets
+  // and its detection reads but its own list omits survives the clear and keeps
+  // the answer `true`, even when some other entry happens to declare it.
+  test.each(withFixture)("$name is undetectable once its variables are cleared", (terminal) => {
     applyFixture(FIXTURES[terminal.name], terminal.floor);
     expect(isSupported()).toBe(true);
-    clearDetectionEnv();
+    for (const name of terminal.variables) {
+      delete process.env[name];
+    }
     expect(isSupported()).toBe(false);
+  });
+
+  // The other direction, and the one the clearing test cannot see: a variable
+  // read behind a short-circuit its fixture satisfies. Detection runs twice —
+  // once under the fixture, once under an empty environment — because `&&` hides
+  // the second half of a gate that passes and `||` hides the second half of one
+  // that fails, so the two runs between them reach both.
+  test.each(withFixture)("$name reads no variable it does not declare", (terminal) => {
+    const env = fixtureEnv(FIXTURES[terminal.name], terminal.floor);
+    const exercise = () => {
+      terminal.claims();
+      terminal.supported();
+    };
+    const read = new Set([...recordEnvReads(env, exercise), ...recordEnvReads({}, exercise)]);
+    const declared = new Set(terminal.variables);
+    expect([...read].filter((name) => !declared.has(name))).toEqual([]);
   });
 
   test.each(gated)("$name is supported at $floor", (terminal) => {

@@ -5,17 +5,27 @@ history, and a glossary of the terminal jargon the front page uses. You need
 none of it to call the library. Start at [README.md](README.md), which covers
 what `termi-link` is, how to install it and how to use it.
 
-- [The fallback contract](#the-fallback-contract)
-- [URL safety](#url-safety)
-- [The escape contract](#the-escape-contract)
-- [Changelog](#changelog)
-- [Credits](#credits)
-- [Glossary](#glossary)
+- [termi-link: the details](#termi-link-the-details)
+  - [The fallback contract](#the-fallback-contract)
+  - [URL safety](#url-safety)
+    - [What you can rely on](#what-you-can-rely-on)
+  - [The escape contract](#the-escape-contract)
+  - [Supported terminals](#supported-terminals)
+  - [Changelog](#changelog)
+  - [Credits](#credits)
+  - [Glossary](#glossary)
+    - [OSC 8](#osc-8)
+    - [Target and display](#target-and-display)
+    - [SGR](#sgr)
+    - [CSI](#csi)
+    - [ESC and BEL](#esc-and-bel)
+    - [Astral characters](#astral-characters)
 
 ## The fallback contract
 
-The fallback contract is close to `terminal-link` v5's, but two differences
-remain by design:
+The fallback contract is close to
+[terminal-link](https://npmjs.com/package/terminal-link) v5's, but two
+differences remain by design:
 
 - **Empty `text`.** v5's default fallback is `` `${text} ${url}` `` with no
   special case, so `terminalLink('', url)` yields a leading space. This library
@@ -39,9 +49,10 @@ The [display value](#target-and-display) is control-free too, apart from the
 [SGR](#sgr) decoration the library preserves on purpose. That is the value the
 fallback prints and a custom `fallback` receives.
 
-`terminal-link` interpolates the url verbatim instead. A [`BEL`](#esc-and-bel)
-inside it therefore ends the sequence early, an `ESC` can start a new one, and a
-non-ASCII url is emitted in a form the specification calls undefined.
+[terminal-link](https://npmjs.com/package/terminal-link) interpolates the url
+verbatim instead. A [`BEL`](#esc-and-bel) inside it therefore ends the sequence
+early, an `ESC` can start a new one, and a non-ASCII url is emitted in a form
+the specification calls undefined.
 
 Encoding *within* ASCII stays with you. Once a url is a single string, only you
 know whether an `&` separates parameters or is literal data inside one, so no
@@ -131,7 +142,48 @@ byte ever reaches the target, so nothing can inject a sequence into the link,
 but the url is no longer the one you passed. Decorate a url with SGR only, and
 strip any other escape form before you call.
 
+## Supported terminals
+
+**Version** is the oldest release that gets links, and `—` means the terminal is
+recognized by presence, with no version gate. **Environment** is every variable
+the library reads for that terminal, and it reads no others.
+
+> [!NOTE]
+> [`TERMI_LINK_HYPERLINK`](README.md#termi_link_hyperlink) is checked before
+> any of the rows below, and overrides every one of them.
+
+| Terminal            | Version  | Environment                                                          | Notes                                                                                                                                                                                  |
+| ------------------- | -------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Alacritty           | —        | `TERM=alacritty` or `alacritty-direct`                               |                                                                                                                                                                                        |
+| Contour             | 0.1.0    | `TERMINAL_NAME` contains `contour`, `TERMINAL_VERSION_TRIPLE`        |                                                                                                                                                                                        |
+| DomTerm             | —        | `DOMTERM`                                                            |                                                                                                                                                                                        |
+| Foot                | —        | `TERM` contains `foot`                                               |                                                                                                                                                                                        |
+| Ghostty             | 1.0      | `TERM_PROGRAM=ghostty`, `TERM_PROGRAM_VERSION`, `TERM=xterm-ghostty` | The `TERM` form is ungated: it carries no version, and every release that sets it speaks OSC 8.                                                                                        |
+| Hyper               | 4.0      | `TERM_PROGRAM=Hyper`, `TERM_PROGRAM_VERSION`                         |                                                                                                                                                                                        |
+| iTerm2              | 3.1      | `TERM_PROGRAM=iTerm.app`, `TERM_PROGRAM_VERSION`                     |                                                                                                                                                                                        |
+| JetBrains IDEs      | —        | `TERMINAL_EMULATOR=JetBrains-JediTerm`                               |                                                                                                                                                                                        |
+| kitty               | —        | `TERM=xterm-kitty`                                                   |                                                                                                                                                                                        |
+| Konsole             | —        | `KONSOLE_VERSION`                                                    |                                                                                                                                                                                        |
+| mintty              | 2.9.7    | `TERM_PROGRAM` contains `mintty`, `TERM_PROGRAM_VERSION`             |                                                                                                                                                                                        |
+| Rio                 | 0.0.28   | `TERM_PROGRAM` contains `rio`, `TERM_PROGRAM_VERSION`                |                                                                                                                                                                                        |
+| Tabby               | —        | `TERM_PROGRAM` contains `tabby`                                      |                                                                                                                                                                                        |
+| Terminology         | 1.2      | `TERM_PROGRAM=terminology`, `TERM_PROGRAM_VERSION`                   |                                                                                                                                                                                        |
+| tmux                | 3.4      | `TMUX`, `TERM_PROGRAM=tmux`, `TERM_PROGRAM_VERSION`                  | The multiplexer's own version, not the terminal's. Inside a pane tmux is what receives the escape sequence, so it answers for the session rather than the terminal running outside it. |
+| VS Code             | 1.72     | `TERM_PROGRAM=vscode`, `TERM_PROGRAM_VERSION`                        |                                                                                                                                                                                        |
+| VTE-based terminals | 0.50.1   | `VTE_VERSION`                                                        | GNOME Terminal, Tilix and Guake among others. The floor starts one release above 0.50.0, which shipped link support and crashed on it.                                                 |
+| WezTerm             | 20200620 | `TERM_PROGRAM=WezTerm`, `TERM_PROGRAM_VERSION`                       | Dated releases. A nixpkgs `0-unstable-<date>` snapshot is compared by its date instead.                                                                                                |
+| Windows Terminal    | —        | `WT_SESSION`                                                         |                                                                                                                                                                                        |
+| Xfce Terminal       | —        | `COLORTERM=xfce4-terminal`                                           |                                                                                                                                                                                        |
+| Zed                 | —        | `TERM_PROGRAM=zed`                                                   |                                                                                                                                                                                        |
+
 ## Changelog
+
+- 2.0.2
+  - Documentation only. No API change, and no change to what `isSupported()` answers
+    - new [Supported terminals](#supported-terminals) table: every terminal detection recognizes, the release each is supported from, and the variables each is read from
+    - notes where a row needs one — Ghostty's ungated `TERM` form, tmux answering for the session, the VTE family and what it covers, WezTerm's nixpkgs snapshots
+    - the table is checked against the detector itself, so a terminal present in one and missing from the other fails CI
+    - `README.md` points here rather than carrying the table, keeping the front page short
 
 - 2.0.1
   - Documentation only. No behavior change; the corrected JSDoc ships in `dist/index.d.ts`
@@ -142,7 +194,7 @@ strip any other escape form before you call.
     - `\` separates path segments only in the path, and only under the special schemes
 
 - 2.0.0
-  - **Fallback contract**, now matching `terminal-link` v5
+  - **Fallback contract**, now matching [terminal-link](https://npmjs.com/package/terminal-link) v5
     - **Breaking:** `fallback: false` returns `text` unchanged, not an empty string
       - pass `fallback: () => ''` to keep the old behavior
     - **Breaking:** the default fallback is `text url`, not `text (url)`

@@ -53,6 +53,9 @@ function programVersionAtLeast(floor: string): boolean {
   return atLeast(parseVersion(getEnv("TERM_PROGRAM_VERSION")), floor);
 }
 
+// The pair a version-gated TERM_PROGRAM terminal reads.
+const PROGRAM_AND_VERSION = ["TERM_PROGRAM", "TERM_PROGRAM_VERSION"];
+
 // VTE packs its version as major * 10000 + minor * 100 + micro, so a dotted
 // floor has to be packed before it can be compared against VTE_VERSION.
 function packVte(version: string): number {
@@ -70,6 +73,13 @@ function packVte(version: string): number {
 export interface Terminal {
   name: string;
   floor: string | null;
+  /**
+   * Every environment variable `claims()` and `supported()` read, including the
+   * one carrying the version. It is what the README's `Environment` column
+   * documents, and clearing all of them has to make the terminal undetectable —
+   * both are asserted in `src/readme.test.ts`.
+   */
+  variables: string[];
   /** A match answers for the whole session and must not fall through. */
   answersForSession?: boolean;
   /** Is this terminal present at all? */
@@ -82,15 +92,16 @@ export interface Terminal {
 function gated(
   name: string,
   floor: string,
+  variables: string[],
   claims: () => boolean,
   supported: (floor: string) => boolean,
 ): Terminal {
-  return { name, floor, claims, supported: () => supported(floor) };
+  return { name, floor, variables, claims, supported: () => supported(floor) };
 }
 
 /** A terminal recognized by presence, with no version to read. */
-function ungated(name: string, claims: () => boolean): Terminal {
-  return { name, floor: null, claims, supported: () => true };
+function ungated(name: string, variables: string[], claims: () => boolean): Terminal {
+  return { name, floor: null, variables, claims, supported: () => true };
 }
 
 /**
@@ -123,6 +134,7 @@ export const TERMINALS: Terminal[] = [
     ...gated(
       "tmux",
       "3.4",
+      ["TMUX", "TERM_PROGRAM", "TERM_PROGRAM_VERSION"],
       () => hasEnv("TMUX"),
       (floor) => matchesEnv("TERM_PROGRAM", ["tmux"]) && programVersionAtLeast(floor),
     ),
@@ -140,15 +152,23 @@ export const TERMINALS: Terminal[] = [
   gated(
     "VTE-based terminals",
     "0.50.1",
+    ["VTE_VERSION"],
     () => hasEnv("VTE_VERSION"),
     (floor) => parseVersion(getEnv("VTE_VERSION")).major >= packVte(floor),
   ),
 
   // Terminals identified by TERM_PROGRAM.
-  gated("iTerm2", "3.1", () => matchesEnv("TERM_PROGRAM", ["iTerm.app"]), programVersionAtLeast),
+  gated(
+    "iTerm2",
+    "3.1",
+    PROGRAM_AND_VERSION,
+    () => matchesEnv("TERM_PROGRAM", ["iTerm.app"]),
+    programVersionAtLeast,
+  ),
   gated(
     "WezTerm",
     "20200620",
+    PROGRAM_AND_VERSION,
     () => matchesEnv("TERM_PROGRAM", ["WezTerm"]),
     (floor) => {
       // nixpkgs re-versions VCS snapshots as `0-unstable-<date>`, which parses
@@ -163,7 +183,13 @@ export const TERMINALS: Terminal[] = [
       return programVersionAtLeast(floor);
     },
   ),
-  gated("VS Code", "1.72", () => matchesEnv("TERM_PROGRAM", ["vscode"]), programVersionAtLeast),
+  gated(
+    "VS Code",
+    "1.72",
+    PROGRAM_AND_VERSION,
+    () => matchesEnv("TERM_PROGRAM", ["vscode"]),
+    programVersionAtLeast,
+  ),
   // One entry, two paths. A Ghostty below the floor that sets TERM is supported
   // anyway: TERM=xterm-ghostty is set by the terminal itself and carries no
   // version, so there is nothing to gate on and every release setting it speaks
@@ -171,36 +197,58 @@ export const TERMINALS: Terminal[] = [
   gated(
     "Ghostty",
     "1.0",
+    [...PROGRAM_AND_VERSION, "TERM"],
     () => matchesEnv("TERM_PROGRAM", ["ghostty"]) || matchesEnv("TERM", ["xterm-ghostty"]),
     (floor) => matchesEnv("TERM", ["xterm-ghostty"]) || programVersionAtLeast(floor),
   ),
   // Zed has only ever shipped 0.x, so any major-version gate would reject every
   // real release; upstream supports-hyperlinks matches it ungated.
-  ungated("Zed", () => matchesEnv("TERM_PROGRAM", ["zed"])),
+  ungated("Zed", ["TERM_PROGRAM"], () => matchesEnv("TERM_PROGRAM", ["zed"])),
   gated(
     "Terminology",
     "1.2",
+    PROGRAM_AND_VERSION,
     () => matchesEnv("TERM_PROGRAM", ["terminology"]),
     programVersionAtLeast,
   ),
   // Hyper below 4 renders OSC 8 as non-clickable pseudo-links: it ships
   // xterm.js < 5, which has no OSC 8 support at all.
-  gated("Hyper", "4.0", () => matchesEnv("TERM_PROGRAM", ["Hyper"]), programVersionAtLeast),
+  gated(
+    "Hyper",
+    "4.0",
+    PROGRAM_AND_VERSION,
+    () => matchesEnv("TERM_PROGRAM", ["Hyper"]),
+    programVersionAtLeast,
+  ),
 
   // Matched by substring rather than by an exact TERM_PROGRAM value.
-  gated("mintty", "2.9.7", () => envIncludes("TERM_PROGRAM", "mintty"), programVersionAtLeast),
-  ungated("Tabby", () => envIncludes("TERM_PROGRAM", "tabby")),
-  gated("Rio", "0.0.28", () => envIncludes("TERM_PROGRAM", "rio"), programVersionAtLeast),
+  gated(
+    "mintty",
+    "2.9.7",
+    PROGRAM_AND_VERSION,
+    () => envIncludes("TERM_PROGRAM", "mintty"),
+    programVersionAtLeast,
+  ),
+  ungated("Tabby", ["TERM_PROGRAM"], () => envIncludes("TERM_PROGRAM", "tabby")),
+  gated(
+    "Rio",
+    "0.0.28",
+    PROGRAM_AND_VERSION,
+    () => envIncludes("TERM_PROGRAM", "rio"),
+    programVersionAtLeast,
+  ),
 
   // Terminals identified by TERM.
-  ungated("kitty", () => matchesEnv("TERM", ["xterm-kitty"])),
-  ungated("Alacritty", () => matchesEnv("TERM", ["alacritty", "alacritty-direct"])),
+  ungated("kitty", ["TERM"], () => matchesEnv("TERM", ["xterm-kitty"])),
+  ungated("Alacritty", ["TERM"], () => matchesEnv("TERM", ["alacritty", "alacritty-direct"])),
   // Kept out of the exact-match entries above: Foot sets either `foot` or a
   // value carrying it as a substring.
-  ungated("Foot", () => envIncludes("TERM", "foot")),
+  ungated("Foot", ["TERM"], () => envIncludes("TERM", "foot")),
 
-  ungated("Xfce Terminal", () => matchesEnv("COLORTERM", ["xfce4-terminal"])),
-  ungated("JetBrains IDEs", () => matchesEnv("TERMINAL_EMULATOR", ["JetBrains-JediTerm"])),
+  ungated("Xfce Terminal", ["COLORTERM"], () => matchesEnv("COLORTERM", ["xfce4-terminal"])),
+  ungated("JetBrains IDEs", ["TERMINAL_EMULATOR"], () =>
+    matchesEnv("TERMINAL_EMULATOR", ["JetBrains-JediTerm"]),
+  ),
 
   // Contour is the only terminal keyed off neither TERM_PROGRAM, TERM,
   // COLORTERM nor TERMINAL_EMULATOR, so TERMINAL_VERSION_TRIPLE is read here
@@ -208,12 +256,13 @@ export const TERMINALS: Terminal[] = [
   gated(
     "Contour",
     "0.1.0",
+    ["TERMINAL_NAME", "TERMINAL_VERSION_TRIPLE"],
     () => envIncludes("TERMINAL_NAME", "contour"),
     (floor) => atLeast(parseVersion(getEnv("TERMINAL_VERSION_TRIPLE")), floor),
   ),
 
   // Terminals that announce themselves with a standalone variable.
-  ungated("DomTerm", () => hasEnv("DOMTERM")),
-  ungated("Windows Terminal", () => hasEnv("WT_SESSION")),
-  ungated("Konsole", () => hasEnv("KONSOLE_VERSION")),
+  ungated("DomTerm", ["DOMTERM"], () => hasEnv("DOMTERM")),
+  ungated("Windows Terminal", ["WT_SESSION"], () => hasEnv("WT_SESSION")),
+  ungated("Konsole", ["KONSOLE_VERSION"], () => hasEnv("KONSOLE_VERSION")),
 ];
