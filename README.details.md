@@ -179,11 +179,12 @@ the library reads for that terminal, and it reads no others.
 ## Changelog
 
 - 2.0.2
-  - Documentation only. No API change, and no change to what `isSupported()` answers
+  - Documentation and build tooling. No API change, and no change to what `isSupported()` answers
     - new [Supported terminals](#supported-terminals) table: every terminal detection recognizes, the release each is supported from, and the variables each is read from
     - notes where a row needs one — Ghostty's ungated `TERM` form, tmux answering for the session, the VTE family and what it covers, WezTerm's nixpkgs snapshots
     - the table is checked against the detector itself, so a terminal present in one and missing from the other fails CI
     - `README.md` points here rather than carrying the table, keeping the front page short
+    - `esbuild` pinned to `^0.28.1` under `tsup` for GHSA-g7r4-m6w7-qqqr, a dev-only advisory; the published `dist` is byte-identical and the package still has no runtime dependencies
 
 - 2.0.1
   - Documentation only. No behavior change; the corrected JSDoc ships in `dist/index.d.ts`
