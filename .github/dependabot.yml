@@ -1,0 +1,32 @@
+version: 2
+
+updates:
+  # The workflow actions. Grouped so a month's updates arrive as one pull
+  # request rather than one per action.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: chore
+
+  # devDependencies only — the package ships with no runtime dependencies, so
+  # nothing here reaches a consumer. Grouped for the same reason as above.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    allow:
+      - dependency-type: development
+    groups:
+      dev-dependencies:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: chore
