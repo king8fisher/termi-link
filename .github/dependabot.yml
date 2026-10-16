@@ -48,14 +48,5 @@ updates:
       - dependency-name: tsup
         update-types:
           - version-update:semver-major
-      # Vitest 4 runs on Vite 7, which needs Node ^20.19.0 || >=22.12.0. Lift
-      # when `engines.node` moves.
-      - dependency-name: vitest
-        update-types:
-          - version-update:semver-major
-      # Released in lockstep with vitest, so held and lifted with it.
-      - dependency-name: "@vitest/ui"
-        update-types:
-          - version-update:semver-major
     commit-message:
       prefix: chore
