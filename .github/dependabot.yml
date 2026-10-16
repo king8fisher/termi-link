@@ -16,7 +16,9 @@ updates:
       prefix: chore
 
   # devDependencies only — the package ships with no runtime dependencies, so
-  # nothing here reaches a consumer. Grouped for the same reason as above.
+  # nothing here reaches a consumer. Grouped for the same reason as above, but
+  # minor and patch only: each major opens as its own pull request, so one that
+  # fails CI cannot hold back the safe updates beside it.
   - package-ecosystem: npm
     directory: /
     schedule:
@@ -28,5 +30,32 @@ updates:
       dev-dependencies:
         patterns:
           - "*"
+        update-types:
+          - minor
+          - patch
+    # Majors known not to run on this toolchain. Each lifts on the condition
+    # beside it; every other major still arrives as its own pull request.
+    ignore:
+      # TypeScript 7 ships no JavaScript compiler API, which tsup's `dts: true`
+      # declaration build calls. Lift when the declaration build no longer
+      # depends on that API. 6.x is not held.
+      - dependency-name: typescript
+        versions:
+          - ">=7.0.0"
+      # tsup 9 needs Node >=22.18, and `prepare` runs it on every install,
+      # including the Node 18 and 20 CI jobs and git-dependency installs. Lift
+      # when `engines.node` moves.
+      - dependency-name: tsup
+        update-types:
+          - version-update:semver-major
+      # Vitest 4 runs on Vite 7, which needs Node ^20.19.0 || >=22.12.0. Lift
+      # when `engines.node` moves.
+      - dependency-name: vitest
+        update-types:
+          - version-update:semver-major
+      # Released in lockstep with vitest, so held and lifted with it.
+      - dependency-name: "@vitest/ui"
+        update-types:
+          - version-update:semver-major
     commit-message:
       prefix: chore
